@@ -1,10 +1,13 @@
 package com.loganalyzer.storage;
 
-import com.loganalyzer.model.LogAnalysisResult;
 import com.loganalyzer.model.LogEntry;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 
@@ -12,60 +15,66 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class LogStoreTest {
 
+    private final LogStore store = new LogStore();
+
     @Test
-    void shouldStoreAndRetrieveResults() {
-        LogStore store = new LogStore();
-        Instant now = Instant.now();
+    void shouldReturnEmptyForUnknownFile(@TempDir Path tempDir) throws IOException {
+        Path file = tempDir.resolve("unknown.log");
+        Files.writeString(file, "");
 
-        LogEntry entry = new LogEntry(now, "ERROR", "app", "fail", "file.log");
-        LogAnalysisResult result = new LogAnalysisResult("app", now, List.of(entry), 10, 1);
-
-        store.store(result);
-
-        List<LogAnalysisResult> all = store.getAll();
-        assertEquals(1, all.size());
-        assertEquals("app", all.get(0).app());
+        List<LogEntry> entries = store.getOrLoad(file, List::of);
+        assertTrue(entries.isEmpty());
     }
 
     @Test
-    void shouldFilterByApp() {
-        LogStore store = new LogStore();
-        Instant now = Instant.now();
+    void shouldCacheEntriesOnFirstLoad(@TempDir Path tempDir) throws IOException {
+        Path file = tempDir.resolve("app.log");
+        Files.writeString(file, "line");
 
-        LogEntry entry1 = new LogEntry(now, "ERROR", "app1", "msg1", "f.log");
-        LogAnalysisResult r1 = new LogAnalysisResult("app1", now, List.of(entry1), 5, 1);
-        store.store(r1);
+        LogEntry entry = new LogEntry(Instant.now(), "ERROR", "app", "msg", file.toString());
+        int[] callCount = {0};
 
-        LogEntry entry2 = new LogEntry(now, "ERROR", "app2", "msg2", "f.log");
-        LogAnalysisResult r2 = new LogAnalysisResult("app2", now, List.of(entry2), 5, 1);
-        store.store(r2);
+        List<LogEntry> first = store.getOrLoad(file, () -> {
+            callCount[0]++;
+            return List.of(entry);
+        });
 
-        List<LogAnalysisResult> app1Results = store.getByApp("app1");
-        List<LogAnalysisResult> app2Results = store.getByApp("app2");
+        List<LogEntry> second = store.getOrLoad(file, () -> {
+            callCount[0]++;
+            return List.of();
+        });
 
-        assertEquals(1, app1Results.size());
-        assertEquals("app1", app1Results.get(0).app());
-        assertEquals(1, app2Results.size());
-        assertEquals("app2", app2Results.get(0).app());
+        assertEquals(1, first.size());
+        assertEquals(1, second.size());
+        assertEquals(1, callCount[0], "loader should be called only once if file unchanged");
     }
 
     @Test
-    void shouldClearAll() {
-        LogStore store = new LogStore();
-        Instant now = Instant.now();
+    void shouldReloadAfterInvalidation(@TempDir Path tempDir) throws IOException {
+        Path file = tempDir.resolve("app.log");
+        Files.writeString(file, "line");
 
-        LogEntry entry = new LogEntry(now, "ERROR", "app", "msg", "f.log");
-        LogAnalysisResult result = new LogAnalysisResult("app", now, List.of(entry), 5, 1);
-        store.store(result);
+        LogEntry entry = new LogEntry(Instant.now(), "ERROR", "app", "msg", file.toString());
+        int[] callCount = {0};
 
+        store.getOrLoad(file, () -> { callCount[0]++; return List.of(entry); });
+        store.invalidate(file);
+        store.getOrLoad(file, () -> { callCount[0]++; return List.of(entry); });
+
+        assertEquals(2, callCount[0], "loader should be called again after invalidation");
+    }
+
+    @Test
+    void shouldClearAllEntries(@TempDir Path tempDir) throws IOException {
+        Path file = tempDir.resolve("app.log");
+        Files.writeString(file, "line");
+
+        store.getOrLoad(file, List::of);
         store.clear();
-        assertTrue(store.getAll().isEmpty());
-    }
 
-    @Test
-    void shouldReturnEmptyByDefault() {
-        LogStore store = new LogStore();
-        assertTrue(store.getAll().isEmpty());
-        assertTrue(store.getByApp("app").isEmpty());
+        int[] callCount = {0};
+        store.getOrLoad(file, () -> { callCount[0]++; return List.of(); });
+
+        assertEquals(1, callCount[0], "loader should be called after clear");
     }
 }

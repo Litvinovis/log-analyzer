@@ -7,6 +7,7 @@ public record LogQuery(
         List<String> apps,
         Instant from,
         Instant to,
-        List<String> levels
+        List<String> levels,
+        String contains
 ) {
 }
