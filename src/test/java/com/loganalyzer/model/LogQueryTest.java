@@ -15,11 +15,18 @@ class LogQueryTest {
         Instant to = Instant.now();
         List<String> apps = List.of("app1", "app2");
 
-        LogQuery query = new LogQuery(apps, from, to, List.of("ERROR"));
+        LogQuery query = new LogQuery(apps, from, to, List.of("ERROR"), "timeout");
 
         assertEquals(apps, query.apps());
         assertEquals(from, query.from());
         assertEquals(to, query.to());
         assertEquals(List.of("ERROR"), query.levels());
+        assertEquals("timeout", query.contains());
+    }
+
+    @Test
+    void shouldAllowNullContains() {
+        LogQuery query = new LogQuery(List.of("app"), null, null, null, null);
+        assertNull(query.contains());
     }
 }

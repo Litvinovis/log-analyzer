@@ -22,4 +22,24 @@ class LogAnalyzerConfigTest {
         assertEquals(2, config.getLogPaths().size());
         assertEquals("/var/log/app1", config.getLogPaths().get(0));
     }
+
+    @Test
+    void shouldHaveDefaultCacheTtl() {
+        LogAnalyzerConfig config = new LogAnalyzerConfig();
+        assertEquals(300, config.getCacheTtlSeconds());
+    }
+
+    @Test
+    void shouldHaveDefaultMaxCacheFileSize() {
+        LogAnalyzerConfig config = new LogAnalyzerConfig();
+        assertEquals(50, config.getMaxCacheFileSizeMb());
+    }
+
+    @Test
+    void shouldSetLogPattern() {
+        LogAnalyzerConfig config = new LogAnalyzerConfig();
+        assertNull(config.getLogPattern());
+        config.setLogPattern("^(.+)$");
+        assertEquals("^(.+)$", config.getLogPattern());
+    }
 }

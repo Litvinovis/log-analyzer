@@ -1,11 +1,12 @@
 package com.loganalyzer.parser;
 
+import com.loganalyzer.config.LogAnalyzerConfig;
 import com.loganalyzer.model.LogEntry;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -13,52 +14,69 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Component
 public class LogFileParser {
 
-    // Common log pattern: timestamp level [app] message
-    private static final Pattern LOG_PATTERN = Pattern.compile(
-            "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?)\\s+(\\w+)\\s+\\[([^\\]]+)\\]\\s+(.*)"
-    );
+    static final String DEFAULT_PATTERN =
+            "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?)\\s+(\\w+)\\s+\\[([^\\]]+)\\]\\s+(.*)";
+
+    private final Pattern logPattern;
+
+    @Autowired
+    public LogFileParser(LogAnalyzerConfig config) {
+        String raw = config.getLogPattern() != null ? config.getLogPattern() : DEFAULT_PATTERN;
+        this.logPattern = Pattern.compile(raw);
+    }
+
+    public LogFileParser() {
+        this.logPattern = Pattern.compile(DEFAULT_PATTERN);
+    }
+
+    public Stream<LogEntry> stream(Path filePath, String appName) throws IOException {
+        var reader = Files.newBufferedReader(filePath);
+        return reader.lines()
+                .map(line -> parseLine(line, appName, filePath))
+                .filter(Objects::nonNull)
+                .onClose(() -> {
+                    try { reader.close(); } catch (IOException ignored) {}
+                });
+    }
+
+    public Stream<LogEntry> streamGz(Path filePath, String appName) throws IOException {
+        var is = Files.newInputStream(filePath);
+        var gz = new GZIPInputStream(is);
+        var reader = new BufferedReader(new InputStreamReader(gz));
+        return reader.lines()
+                .map(line -> parseLine(line, appName, filePath))
+                .filter(Objects::nonNull)
+                .onClose(() -> {
+                    try { reader.close(); } catch (IOException ignored) {}
+                });
+    }
 
     public List<LogEntry> parse(Path filePath, String appName) throws IOException {
-        List<LogEntry> entries = new ArrayList<>();
-        String fileName = filePath.getFileName().toString();
-
-        if (fileName.endsWith(".gz")) {
+        if (filePath.getFileName().toString().endsWith(".gz")) {
             return parseGzFile(filePath, appName);
         }
-
-        try (var reader = Files.newBufferedReader(filePath)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                LogEntry entry = parseLine(line, appName, filePath);
-                if (entry != null) {
-                    entries.add(entry);
-                }
-            }
+        try (Stream<LogEntry> s = stream(filePath, appName)) {
+            return s.toList();
         }
-        return entries;
     }
 
     public List<LogEntry> parseGzFile(Path filePath, String appName) throws IOException {
-        List<LogEntry> entries = new ArrayList<>();
-        try (InputStream is = Files.newInputStream(filePath);
-             var gzStream = new java.util.zip.GZIPInputStream(is);
-             var reader = new BufferedReader(new InputStreamReader(gzStream))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                LogEntry entry = parseLine(line, appName, filePath);
-                if (entry != null) {
-                    entries.add(entry);
-                }
-            }
+        try (Stream<LogEntry> s = streamGz(filePath, appName)) {
+            return s.toList();
         }
-        return entries;
     }
 
     LogEntry parseLine(String line, String appName, Path sourceFile) {
@@ -66,7 +84,7 @@ public class LogFileParser {
             return null;
         }
 
-        Matcher matcher = LOG_PATTERN.matcher(line);
+        Matcher matcher = logPattern.matcher(line);
         if (!matcher.matches()) {
             return null;
         }
@@ -77,10 +95,7 @@ public class LogFileParser {
         }
 
         String level = matcher.group(2).toUpperCase();
-        String app = appName;
-        if (app == null || app.isBlank()) {
-            app = matcher.group(3);
-        }
+        String app = (appName != null && !appName.isBlank()) ? appName : matcher.group(3);
         String message = matcher.group(4);
 
         return new LogEntry(timestamp, level, app, message, sourceFile.toString());

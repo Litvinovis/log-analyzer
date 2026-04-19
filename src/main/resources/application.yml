@@ -4,7 +4,18 @@ server:
 log-analyzer:
   log-paths:
     - /var/log/app
+  cache-ttl-seconds: 300
+  max-cache-file-size-mb: 50
 
 spring:
   application:
     name: log-analyzer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

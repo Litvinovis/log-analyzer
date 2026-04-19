@@ -8,9 +8,6 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.zip.GZIPOutputStream;
 
@@ -46,6 +43,19 @@ class LogFileParserTest {
         assertNotNull(entry);
         assertEquals("FATAL", entry.level());
         assertEquals("auth-service", entry.app());
+    }
+
+    @Test
+    void shouldParseLogLineWithFractionalZTimestamp() {
+        LogEntry entry = parser.parseLine(
+                "2025-01-15T10:30:00.123Z ERROR [svc] Fractional Z timestamp",
+                null,
+                Path.of("test.log")
+        );
+
+        assertNotNull(entry);
+        assertEquals("ERROR", entry.level());
+        assertNotNull(entry.timestamp());
     }
 
     @Test
@@ -105,5 +115,22 @@ class LogFileParserTest {
 
         assertNotNull(entry);
         assertEquals("override-app", entry.app());
+    }
+
+    @Test
+    void shouldStreamFile(@TempDir Path tempDir) throws IOException {
+        Path logFile = tempDir.resolve("app.log");
+        Files.writeString(logFile,
+                "2025-01-15T10:30:00 ERROR [svc] Error one\n" +
+                "2025-01-15T10:31:00 WARN [svc] Warning\n" +
+                "2025-01-15T10:32:00 INFO [svc] Info\n"
+        );
+
+        List<LogEntry> entries;
+        try (var stream = parser.stream(logFile, null)) {
+            entries = stream.toList();
+        }
+
+        assertEquals(3, entries.size());
     }
 }
