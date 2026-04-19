@@ -90,51 +90,16 @@ public class LogFileParser {
         if (timestampStr == null || timestampStr.isBlank()) {
             return null;
         }
-
-        LocalDateTime dt;
         try {
             if (timestampStr.endsWith("Z")) {
-                String withoutZ = timestampStr.substring(0, timestampStr.length() - 1);
-                if (withoutZ.contains(".")) {
-                    int dotIdx = withoutZ.indexOf('.');
-                    String baseTime = withoutZ.substring(withoutZ.indexOf('T') + 1);
-                    String frac = baseTime.substring(dotIdx - withoutZ.indexOf('T') - 1 + 1);
-                    int nanoLen = Math.min(frac.length(), 9);
-                    String nanoStr = String.format("%-9s", frac).replace(' ', '0').substring(0, nanoLen);
-                    String fullTime = baseTime.substring(0, dotIdx - withoutZ.indexOf('T') - 1 + 1) + "." + nanoStr;
-                    dt = LocalDateTime.parse(withoutZ.substring(0, withoutZ.indexOf('T') + 1) + fullTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-                } else {
-                    dt = LocalDateTime.parse(withoutZ, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-                }
-                return dt.atZone(ZoneId.of("UTC")).toInstant();
+                return Instant.parse(timestampStr);
             }
-
-            int sepIdx = timestampStr.indexOf('T');
-            if (sepIdx == -1) {
-                sepIdx = timestampStr.indexOf(' ');
-            }
-            if (sepIdx == -1) {
-                return null;
-            }
-
-            String datePart = timestampStr.substring(0, sepIdx);
-            String timePart = timestampStr.substring(sepIdx + 1);
-
-            if (timePart.contains(".")) {
-                int dotIdx = timePart.indexOf('.');
-                String baseTime = timePart.substring(0, dotIdx);
-                String frac = timePart.substring(dotIdx + 1).replaceAll("0*$", "");
-                int nanoLen = Math.min(frac.length(), 9);
-                String nanoStr = String.format("%-9s", frac).replace(' ', '0').substring(0, nanoLen);
-                String fullTime = baseTime + "." + nanoStr;
-                dt = LocalDateTime.parse(datePart + "T" + fullTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            } else {
-                dt = LocalDateTime.parse(datePart + "T" + timePart, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            }
+            String normalized = timestampStr.replace(' ', 'T');
+            return LocalDateTime.parse(normalized, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                    .atZone(ZoneId.of("UTC"))
+                    .toInstant();
         } catch (DateTimeParseException e) {
             return null;
         }
-
-        return dt.atZone(ZoneId.of("UTC")).toInstant();
     }
 }

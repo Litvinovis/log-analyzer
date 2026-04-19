@@ -6,16 +6,13 @@ import com.loganalyzer.model.LogEntry;
 import com.loganalyzer.parser.LogFileParser;
 
 import java.io.IOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 
@@ -45,14 +42,14 @@ public class LogAnalyzerService {
                 if (appSet != null && !appSet.contains(app)) {
                     continue;
                 }
-                List<LogEntry> errors = filterErrors(logFile, from, to);
-                if (!errors.isEmpty()) {
+                ParseResult parsed = filterErrors(logFile, from, to);
+                if (!parsed.errors().isEmpty()) {
                     results.add(new LogAnalysisResult(
                             app,
                             Instant.now(),
-                            errors,
-                            errors.size(),
-                            errors.size()
+                            parsed.errors(),
+                            parsed.totalLines(),
+                            parsed.errors().size()
                     ));
                 }
             }
@@ -90,7 +87,9 @@ public class LogAnalyzerService {
         return filePath.getFileName().toString().replaceAll("\\.(log|gz)$", "");
     }
 
-    private List<LogEntry> filterErrors(Path logFile, Instant from, Instant to) {
+    private record ParseResult(List<LogEntry> errors, long totalLines) {}
+
+    private ParseResult filterErrors(Path logFile, Instant from, Instant to) {
         try {
             List<LogEntry> allEntries;
             String name = logFile.getFileName().toString();
@@ -100,13 +99,14 @@ public class LogAnalyzerService {
                 allEntries = parser.parse(logFile, null);
             }
 
-            return allEntries.stream()
+            List<LogEntry> errors = allEntries.stream()
                     .filter(e -> e.level().equalsIgnoreCase("ERROR") || e.level().equalsIgnoreCase("FATAL"))
                     .filter(e -> from == null || !e.timestamp().isBefore(from))
                     .filter(e -> to == null || !e.timestamp().isAfter(to))
                     .toList();
+            return new ParseResult(errors, allEntries.size());
         } catch (IOException e) {
-            return List.of();
+            return new ParseResult(List.of(), 0);
         }
     }
 }
