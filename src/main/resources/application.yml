@@ -1,0 +1,10 @@
+server:
+  port: 8080
+
+log-analyzer:
+  log-paths:
+    - /var/log/app
+
+spring:
+  application:
+    name: log-analyzer

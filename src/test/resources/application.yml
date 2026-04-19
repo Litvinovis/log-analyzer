@@ -1,0 +1,3 @@
+log-analyzer:
+  log-paths:
+    - /tmp/test-logs
