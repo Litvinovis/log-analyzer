@@ -25,10 +25,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -39,45 +42,53 @@ public class LogAnalyzerService {
     private final LogFileParser parser;
     private final LogStore store;
     private final SshLogReader sshLogReader;
+    private final Executor executor;
 
     private record JobEntry(String status, List<LogAnalysisResult> results) {}
     private final ConcurrentHashMap<String, JobEntry> jobs = new ConcurrentHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired
-    public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store, SshLogReader sshLogReader) {
+    public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store,
+                              SshLogReader sshLogReader,
+                              @Qualifier("logAnalyzerExecutor") Executor executor) {
         this.config = config;
         this.parser = parser;
         this.store = store;
         this.sshLogReader = sshLogReader;
+        this.executor = executor;
     }
 
-    // Used in tests without SSH
+    // Used in tests without SSH/executor
     public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store) {
-        this(config, parser, store, null);
+        this(config, parser, store, null, Runnable::run);
     }
 
     public List<LogAnalysisResult> analyzeErrors(
             List<String> apps, Instant from, Instant to, List<String> levels, String contains) {
 
-        List<LogAnalysisResult> results = new ArrayList<>();
         Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
+        List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
+                .filter(s -> appSet == null || appSet.contains(s.getName()))
+                .toList();
 
-        for (LogAnalyzerConfig.Source source : config.getSources()) {
-            if (appSet != null && !appSet.contains(source.getName())) continue;
+        List<CompletableFuture<Optional<LogAnalysisResult>>> futures = sources.stream()
+                .map(source -> CompletableFuture.supplyAsync(() -> {
+                    List<LogEntry> all = loadEntries(source);
+                    List<String> effectiveLevels = (levels != null && !levels.isEmpty())
+                            ? levels : source.getWatchLevels();
+                    ParseResult parsed = applyFilters(all, from, to, effectiveLevels, contains);
+                    if (parsed.errors().isEmpty()) return Optional.<LogAnalysisResult>empty();
+                    return Optional.of(new LogAnalysisResult(
+                            source.getName(), Instant.now(),
+                            parsed.errors(), all.size(), parsed.errors().size()));
+                }, executor))
+                .toList();
 
-            List<LogEntry> all = loadEntries(source);
-            List<String> effectiveLevels = (levels != null && !levels.isEmpty())
-                    ? levels : source.getWatchLevels();
-
-            ParseResult parsed = applyFilters(all, from, to, effectiveLevels, contains);
-            if (!parsed.errors().isEmpty()) {
-                results.add(new LogAnalysisResult(
-                        source.getName(), Instant.now(),
-                        parsed.errors(), all.size(), parsed.errors().size()
-                ));
-            }
-        }
-        return results;
+        return futures.stream()
+                .map(CompletableFuture::join)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .toList();
     }
 
     /**
@@ -151,18 +162,25 @@ public class LogAnalyzerService {
 
         Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
         List<String> effectiveLevels = (levels != null && !levels.isEmpty()) ? levels : null;
-
-        return config.getSources().stream()
+        List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
                 .filter(s -> appSet == null || appSet.contains(s.getName()))
-                .flatMap(s -> {
-                    List<LogEntry> all = loadEntries(s);
+                .toList();
+
+        List<CompletableFuture<List<LogEntry>>> futures = sources.stream()
+                .map(source -> CompletableFuture.supplyAsync(() -> {
+                    List<LogEntry> all = loadEntries(source);
                     return all.stream()
                             .filter(e -> effectiveLevels == null
                                     || effectiveLevels.stream().anyMatch(l -> l.equalsIgnoreCase(e.level())))
                             .filter(e -> from == null || !e.timestamp().isBefore(from))
                             .filter(e -> to == null || !e.timestamp().isAfter(to))
-                            .filter(e -> contains == null || mentionsId(e, contains));
-                })
+                            .filter(e -> contains == null || mentionsId(e, contains))
+                            .toList();
+                }, executor))
+                .toList();
+
+        return futures.stream()
+                .flatMap(f -> f.join().stream())
                 .sorted(java.util.Comparator.comparing(LogEntry::timestamp))
                 .toList();
     }
