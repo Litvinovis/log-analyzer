@@ -240,6 +240,30 @@ class LogAnalyzerServiceTest {
     }
 
     @Test
+    void shouldExcludeGcLogFiles() throws IOException {
+        Path logsDir = tempDir.resolve("app/logs");
+        Files.createDirectories(logsDir);
+        String gcContent = "2026-04-20 00:00:08.205 [ERROR][gc-thread][gcLogger] GC overhead\n";
+        String appContent = "2026-04-20 00:01:00.000 [response-exec-1] ERROR enricher - Реальная ошибка\n";
+        Files.writeString(logsDir.resolve("app-GC.log"),   gcContent);
+        Files.writeString(logsDir.resolve("app-GC.log.0"), gcContent);
+        Files.writeString(logsDir.resolve("app.log"),      appContent);
+
+        LogAnalyzerConfig config = new LogAnalyzerConfig();
+        LogAnalyzerConfig.Source source = new LogAnalyzerConfig.Source();
+        source.setName("app"); source.setLogPath(logsDir.toString());
+        source.setLogFormat(LogFormat.MICROSERVICE);
+        config.setSources(List.of(source));
+
+        LogAnalyzerService service = new LogAnalyzerService(config, new LogFileParser(), new LogStore());
+        List<LogAnalysisResult> results = service.analyzeErrors(null, null, null, List.of("ERROR"), null);
+
+        assertEquals(1, results.size());
+        assertEquals(1, results.get(0).errorCount(), "Only app.log should be scanned, not GC logs");
+        assertTrue(results.get(0).errors().get(0).message().contains("Реальная ошибка"));
+    }
+
+    @Test
     void shouldParseIgniteFormatSource() throws IOException {
         LogAnalyzerService service = createService("ignite-node", LogFormat.IGNITE,
                 "2026-04-20 00:00:08.205 [TRACE][Thread-BackupEventsKafkaLoader][backupEventsLog] Пустой poll\n" +

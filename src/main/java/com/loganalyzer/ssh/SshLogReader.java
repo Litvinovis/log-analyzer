@@ -125,6 +125,7 @@ public class SshLogReader {
 
     private boolean isLogFile(String name) {
         String lower = name.toLowerCase();
+        if (lower.contains("gc.log")) return false;
         return lower.endsWith(".log") || lower.endsWith(".log.gz") || lower.endsWith(".gz");
     }
 }

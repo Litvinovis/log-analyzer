@@ -383,6 +383,7 @@ public class LogAnalyzerService {
                     .filter(Files::isRegularFile)
                     .filter(p -> {
                         String name = p.getFileName().toString().toLowerCase();
+                        if (name.contains("gc.log")) return false;
                         return name.endsWith(".log") || name.endsWith(".log.gz") || name.endsWith(".gz");
                     })
                     .toList());
