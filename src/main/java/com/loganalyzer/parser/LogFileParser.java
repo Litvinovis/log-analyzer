@@ -186,11 +186,6 @@ public class LogFileParser {
         return null;
     }
 
-    // Kept for backward compat with tests
-    LogEntry parseLine(String line, String appName, Path sourceFile) {
-        return parseLine(line, appName, sourceFile.toString(), LogFormat.AUTO);
-    }
-
     /**
      * Reads the file line-by-line using a stream (avoids loading all lines into memory first).
      */
@@ -237,10 +232,6 @@ public class LogFileParser {
 
     public Stream<LogEntry> stream(Path filePath, String appName) throws IOException {
         return parseWithFormat(filePath, appName, LogFormat.AUTO).stream();
-    }
-
-    public Stream<LogEntry> streamGz(Path filePath, String appName) throws IOException {
-        return parseGzFile(filePath, appName, LogFormat.AUTO).stream();
     }
 
     private Instant parseTimestamp(String ts) {

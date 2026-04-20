@@ -67,11 +67,6 @@ public class SshLogReader {
         }
     }
 
-    // Backward-compat overload without time filter
-    public List<String> listRemoteFiles(LogAnalyzerConfig.Source source, String remotePath) {
-        return listRemoteFiles(source, remotePath, null);
-    }
-
     /**
      * Reads all lines from a remote file via SFTP.
      * Supports .gz files. Returns empty list on any error.

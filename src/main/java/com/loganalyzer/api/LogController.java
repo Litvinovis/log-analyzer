@@ -44,16 +44,9 @@ public class LogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        List<String> apps = app != null ? List.of(app.split(",")) : List.of();
-        Instant fromInstant = from != null && !from.isBlank() ? Instant.parse(from) : null;
-        Instant toInstant   = to   != null && !to.isBlank()   ? Instant.parse(to)   : null;
-
-        List<LogAnalysisResult> all = analyzerService.analyzeErrors(apps, fromInstant, toInstant, levels, contains);
-        int total      = all.size();
-        int totalPages = size > 0 ? (int) Math.ceil((double) total / size) : 1;
-        List<LogAnalysisResult> paged = all.stream().skip((long) page * size).limit(size).toList();
-
-        return ResponseEntity.ok(new PagedResult<>(paged, page, size, total, totalPages));
+        List<LogAnalysisResult> all = analyzerService.analyzeErrors(
+                parseApps(app), parseInstant(from), parseInstant(to), levels, contains);
+        return ResponseEntity.ok(toPage(all, page, size));
     }
 
     @GetMapping("/stats")
@@ -62,11 +55,8 @@ public class LogController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
 
-        List<String> apps = app != null ? List.of(app.split(",")) : List.of();
-        Instant fromInstant = from != null && !from.isBlank() ? Instant.parse(from) : null;
-        Instant toInstant   = to   != null && !to.isBlank()   ? Instant.parse(to)   : null;
-
-        return ResponseEntity.ok(analyzerService.getStats(apps, fromInstant, toInstant));
+        return ResponseEntity.ok(
+                analyzerService.getStats(parseApps(app), parseInstant(from), parseInstant(to)));
     }
 
     @PostMapping("/analyze")
@@ -102,10 +92,8 @@ public class LogController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
 
-        List<String> apps = app != null ? List.of(app.split(",")) : List.of();
-        Instant fromInstant = from != null && !from.isBlank() ? Instant.parse(from) : null;
-        Instant toInstant   = to   != null && !to.isBlank()   ? Instant.parse(to)   : null;
-        List<TraceResult> results = analyzerService.findByTraceId(traceId, apps, fromInstant, toInstant);
+        List<TraceResult> results = analyzerService.findByTraceId(
+                traceId, parseApps(app), parseInstant(from), parseInstant(to));
         return ResponseEntity.ok(results);
     }
 
@@ -119,16 +107,9 @@ public class LogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "100") int size) {
 
-        List<String> apps = app != null ? List.of(app.split(",")) : List.of();
-        Instant fromInstant = from != null && !from.isBlank() ? Instant.parse(from) : null;
-        Instant toInstant   = to   != null && !to.isBlank()   ? Instant.parse(to)   : null;
-
-        List<LogEntry> all = analyzerService.getAllEntries(apps, fromInstant, toInstant, levels, contains);
-        int total      = all.size();
-        int totalPages = size > 0 ? (int) Math.ceil((double) total / size) : 1;
-        List<LogEntry> paged = all.stream().skip((long) page * size).limit(size).toList();
-
-        return ResponseEntity.ok(new PagedResult<>(paged, page, size, total, totalPages));
+        List<LogEntry> all = analyzerService.getAllEntries(
+                parseApps(app), parseInstant(from), parseInstant(to), levels, contains);
+        return ResponseEntity.ok(toPage(all, page, size));
     }
 
     @GetMapping("/apps")
@@ -144,5 +125,20 @@ public class LogController {
     @ExceptionHandler(DateTimeParseException.class)
     public ResponseEntity<String> handleDateParseError(DateTimeParseException e) {
         return ResponseEntity.badRequest().body("Invalid date format: " + e.getParsedString());
+    }
+
+    private static List<String> parseApps(String app) {
+        return app != null ? List.of(app.split(",")) : List.of();
+    }
+
+    private static Instant parseInstant(String s) {
+        return s != null && !s.isBlank() ? Instant.parse(s) : null;
+    }
+
+    private static <T> PagedResult<T> toPage(List<T> all, int page, int size) {
+        int total      = all.size();
+        int totalPages = size > 0 ? (int) Math.ceil((double) total / size) : 1;
+        List<T> paged  = all.stream().skip((long) page * size).limit(size).toList();
+        return new PagedResult<>(paged, page, size, total, totalPages);
     }
 }

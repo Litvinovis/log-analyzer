@@ -246,10 +246,6 @@ public class LogAnalyzerService {
                 .map(j -> new JobResponse(jobId, j.status(), j.results()));
     }
 
-    private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source, Instant from) {
-        return loadEntries(source, from, null);
-    }
-
     private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source, Instant from, Instant to) {
         if (source.getConnection() == ConnectionType.SSH) {
             return loadRemoteEntries(source, from);
