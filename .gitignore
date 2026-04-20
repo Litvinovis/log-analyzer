@@ -1,1 +1,5 @@
 target/
+logs/*.log
+logs/*.log.gz
+*_start.log
+*_debug.log
