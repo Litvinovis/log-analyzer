@@ -6,15 +6,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Controller
 public class SpaController {
 
-    // Forward all non-API paths without a file extension to index.html (e.g. /errors, /stats)
-    // Paths with dots (index.html, main.js, etc.) are excluded to avoid infinite forward loops
+    // Forward single-level paths without a file extension to index.html (e.g. /errors, /stats).
+    // Multi-level paths are intentionally NOT forwarded so that /assets/main.js and other
+    // static resources are still served by Spring's resource handler.
     @RequestMapping(value = "/{path:^(?!api|actuator)[^\\.]*}")
-    public String forwardSingleLevel() {
-        return "forward:/index.html";
-    }
-
-    @RequestMapping(value = "/{path:^(?!api|actuator)[^\\.]*}/**")
-    public String forwardMultiLevel() {
+    public String forward() {
         return "forward:/index.html";
     }
 }
