@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import {
   Card, Form, Input, Button, Alert, Space, Table,
-  Typography, Tag, Collapse, Empty, Badge, Select,
+  Typography, Tag, Collapse, Empty, Badge, Select, Segmented,
 } from 'antd'
-import { SearchOutlined } from '@ant-design/icons'
+import { SearchOutlined, UnorderedListOutlined, AppstoreOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
@@ -12,6 +12,17 @@ import { useApps } from '../hooks/useApps'
 const { Text, Paragraph } = Typography
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const APP_COLORS = ['cyan', 'geekblue', 'purple', 'volcano', 'gold', 'lime', 'green', 'magenta', 'blue', 'orange']
+const appColorCache = {}
+let appColorIdx = 0
+function getAppColor(app) {
+  if (!appColorCache[app]) {
+    appColorCache[app] = APP_COLORS[appColorIdx % APP_COLORS.length]
+    appColorIdx++
+  }
+  return appColorCache[app]
+}
 
 const TIME_WINDOWS = [
   { value: 10,    label: '10 минут' },
@@ -49,6 +60,41 @@ const entryColumns = [
   },
 ]
 
+const timelineColumns = [
+  {
+    title: 'Время',
+    dataIndex: 'timestamp',
+    width: 190,
+    sorter: (a, b) => a.timestamp.localeCompare(b.timestamp),
+    defaultSortOrder: 'ascend',
+    render: (v) => <Text style={{ fontSize: 12 }}>{dayjs(v).format('YYYY-MM-DD HH:mm:ss.SSS')}</Text>,
+  },
+  {
+    title: 'Уровень',
+    dataIndex: 'level',
+    width: 90,
+    render: (v) => <LevelTag level={v} />,
+  },
+  {
+    title: 'Приложение',
+    dataIndex: 'app',
+    width: 150,
+    render: (v) => <Tag color={getAppColor(v)}>{v}</Tag>,
+  },
+  {
+    title: 'Поток',
+    dataIndex: 'threadName',
+    width: 170,
+    ellipsis: true,
+    render: (v) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—',
+  },
+  {
+    title: 'Сообщение',
+    dataIndex: 'message',
+    ellipsis: true,
+  },
+]
+
 const expandable = {
   expandedRowRender: (r) =>
     r.stackTrace ? (
@@ -70,6 +116,7 @@ export default function TracePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [searchedId, setSearchedId] = useState('')
+  const [viewMode, setViewMode] = useState('timeline')
 
   const search = async () => {
     const { traceId, app, windowMinutes } = form.getFieldsValue()
@@ -95,6 +142,10 @@ export default function TracePage() {
   }
 
   const totalEntries = results?.reduce((s, r) => s + r.entries.length, 0) ?? 0
+
+  const flatRows = results?.flatMap((r) =>
+    r.entries.map((e, i) => ({ key: `${r.app}-${i}`, app: r.app, ...e }))
+  ).sort((a, b) => a.timestamp.localeCompare(b.timestamp)) ?? []
 
   const collapseItems = results?.map((r) => ({
     key: r.app,
@@ -161,9 +212,30 @@ export default function TracePage() {
               )}
             </Space>
           }
+          extra={
+            results.length > 0 && (
+              <Segmented
+                value={viewMode}
+                onChange={setViewMode}
+                options={[
+                  { value: 'timeline', icon: <UnorderedListOutlined />, label: 'По времени' },
+                  { value: 'grouped',  icon: <AppstoreOutlined />,      label: 'По приложениям' },
+                ]}
+              />
+            )
+          }
         >
           {results.length === 0 ? (
             <Empty description="UUID не найден ни в одном приложении" />
+          ) : viewMode === 'timeline' ? (
+            <Table
+              columns={timelineColumns}
+              dataSource={flatRows}
+              expandable={expandable}
+              pagination={false}
+              size="small"
+              scroll={{ x: 'max-content' }}
+            />
           ) : (
             <Collapse
               defaultActiveKey={results.map(r => r.app)}
