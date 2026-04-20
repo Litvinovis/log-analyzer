@@ -5,7 +5,7 @@ export function useApps() {
   const [apps, setApps] = useState([])
 
   useEffect(() => {
-    logsApi.getApps().then(setApps).catch(() => {})
+    logsApi.getApps().then(list => setApps([...list].sort())).catch(() => {})
   }, [])
 
   return apps.map(a => ({ value: a, label: a }))
