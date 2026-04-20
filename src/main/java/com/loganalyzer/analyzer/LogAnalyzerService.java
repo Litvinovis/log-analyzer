@@ -133,7 +133,7 @@ public class LogAnalyzerService {
                 .toList();
     }
 
-    public List<TraceResult> findByTraceId(String traceId, List<String> apps) {
+    public List<TraceResult> findByTraceId(String traceId, List<String> apps, Instant from, Instant to) {
         List<TraceResult> results = new ArrayList<>();
         Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
 
@@ -141,12 +141,15 @@ public class LogAnalyzerService {
                 .filter(s -> appSet == null || appSet.contains(s.getName()))
                 .toList();
 
-        log.debug("findByTraceId: traceId='{}' apps={} — searching {} source(s)", traceId, apps, sources.size());
+        log.debug("findByTraceId: traceId='{}' apps={} from={} to={} — searching {} source(s)",
+                traceId, apps, from, to, sources.size());
 
         for (LogAnalyzerConfig.Source source : sources) {
             List<LogEntry> all = loadEntries(source);
             log.debug("[{}] loaded {} entries, searching for '{}'", source.getName(), all.size(), traceId);
             List<LogEntry> matching = all.stream()
+                    .filter(e -> from == null || !e.timestamp().isBefore(from))
+                    .filter(e -> to == null || !e.timestamp().isAfter(to))
                     .filter(e -> mentionsId(e, traceId))
                     .toList();
             log.debug("[{}] found {} entries containing traceId", source.getName(), matching.size());

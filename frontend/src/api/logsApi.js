@@ -23,7 +23,7 @@ async function post(path, body) {
 export const logsApi = {
   getErrors:    (params) => get('/errors', params),
   getStats:     (params) => get('/stats',  params),
-  trace:        (traceId, app) => get(`/trace/${traceId}`, app ? { app } : {}),
+  trace:        (traceId, app, from, to) => get(`/trace/${traceId}`, { ...(app ? { app } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }),
   startAnalysis:(body) => post('/analyze', body),
   getJob:       (id) => get(`/jobs/${id}`),
   getAllEntries: (params) => get('/all', params),

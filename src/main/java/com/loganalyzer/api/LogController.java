@@ -98,10 +98,14 @@ public class LogController {
     @GetMapping("/trace/{traceId}")
     public ResponseEntity<List<TraceResult>> traceById(
             @PathVariable String traceId,
-            @RequestParam(required = false) String app) {
+            @RequestParam(required = false) String app,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
 
         List<String> apps = app != null ? List.of(app.split(",")) : List.of();
-        List<TraceResult> results = analyzerService.findByTraceId(traceId, apps);
+        Instant fromInstant = from != null && !from.isBlank() ? Instant.parse(from) : null;
+        Instant toInstant   = to   != null && !to.isBlank()   ? Instant.parse(to)   : null;
+        List<TraceResult> results = analyzerService.findByTraceId(traceId, apps, fromInstant, toInstant);
         return ResponseEntity.ok(results);
     }
 
