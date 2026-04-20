@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Layout, Menu, Typography } from 'antd'
 import {
   AlertOutlined,
@@ -14,7 +14,7 @@ import TracePage from './pages/TracePage'
 import AnalyzePage from './pages/AnalyzePage'
 import StreamPage from './pages/StreamPage'
 
-const { Sider, Content, Header } = Layout
+const { Sider, Content } = Layout
 
 const NAV_ITEMS = [
   { key: '/stream',  icon: <UnorderedListOutlined />, label: 'Все логи' },
@@ -25,27 +25,28 @@ const NAV_ITEMS = [
 ]
 
 export default function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={200} theme="dark">
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #303030' }}>
-          <Typography.Text strong style={{ color: '#fff', fontSize: 16 }}>
+    <Layout style={{ minHeight: '100vh', background: '#13131f' }}>
+      <Sider width={210} style={{ background: '#1a1a2e', borderRight: '1px solid #2d2d44' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #2d2d44' }}>
+          <Typography.Text strong style={{ color: '#e0e0ff', fontSize: 16, letterSpacing: 0.5 }}>
             Log Analyzer
           </Typography.Text>
         </div>
         <Menu
           theme="dark"
           mode="inline"
-          style={{ borderRight: 0 }}
-          items={NAV_ITEMS.map(item => ({
-            key: item.key,
-            icon: item.icon,
-            label: <NavLink to={item.key}>{item.label}</NavLink>,
-          }))}
+          selectedKeys={[location.pathname]}
+          onClick={({ key }) => navigate(key)}
+          style={{ background: 'transparent', borderRight: 0, marginTop: 8 }}
+          items={NAV_ITEMS.map(({ key, icon, label }) => ({ key, icon, label }))}
         />
       </Sider>
-      <Layout>
-        <Content style={{ padding: 24, background: '#f5f5f5', minHeight: '100vh' }}>
+      <Layout style={{ background: '#13131f' }}>
+        <Content style={{ padding: 24, minHeight: '100vh' }}>
           <Routes>
             <Route path="/" element={<Navigate to="/stream" replace />} />
             <Route path="/stream"  element={<StreamPage />} />
