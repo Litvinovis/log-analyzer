@@ -199,6 +199,47 @@ class LogAnalyzerServiceTest {
     }
 
     @Test
+    void shouldGetAllEntries() throws IOException {
+        LogAnalyzerService service = createService();
+        List<com.loganalyzer.model.LogEntry> entries = service.getAllEntries(
+                List.of("svc1"), null, null, null, null);
+
+        assertEquals(4, entries.size());
+    }
+
+    @Test
+    void shouldGetAllEntriesFilteredByLevel() throws IOException {
+        LogAnalyzerService service = createService();
+        List<com.loganalyzer.model.LogEntry> entries = service.getAllEntries(
+                null, null, null, List.of("ERROR"), null);
+
+        assertEquals(2, entries.size());
+        assertTrue(entries.stream().allMatch(e -> "ERROR".equals(e.level())));
+    }
+
+    @Test
+    void shouldGetAllEntriesSortedByTimestamp() throws IOException {
+        LogAnalyzerService service = createService();
+        List<com.loganalyzer.model.LogEntry> entries = service.getAllEntries(
+                null, null, null, null, null);
+
+        for (int i = 1; i < entries.size(); i++) {
+            assertFalse(entries.get(i).timestamp().isBefore(entries.get(i - 1).timestamp()),
+                    "Entries should be sorted ascending by timestamp");
+        }
+    }
+
+    @Test
+    void shouldGetAllEntriesFilteredByContains() throws IOException {
+        LogAnalyzerService service = createService();
+        List<com.loganalyzer.model.LogEntry> entries = service.getAllEntries(
+                null, null, null, null, "Кластер");
+
+        assertEquals(1, entries.size());
+        assertTrue(entries.get(0).message().contains("Кластер"));
+    }
+
+    @Test
     void shouldParseIgniteFormatSource() throws IOException {
         LogAnalyzerService service = createService("ignite-node", LogFormat.IGNITE,
                 "2026-04-20 00:00:08.205 [TRACE][Thread-BackupEventsKafkaLoader][backupEventsLog] Пустой poll\n" +

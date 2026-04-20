@@ -73,4 +73,34 @@ class LogControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
     }
+
+    @Test
+    void shouldReturnAllEntries() throws Exception {
+        mockMvc.perform(get("/api/logs/all"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(100))
+                .andExpect(jsonPath("$.total").isNumber());
+    }
+
+    @Test
+    void shouldReturnAllEntriesWithPageParams() throws Exception {
+        mockMvc.perform(get("/api/logs/all").param("page", "0").param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(5));
+    }
+
+    @Test
+    void shouldReturnAppsList() throws Exception {
+        mockMvc.perform(get("/api/logs/apps"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void shouldReturnBadRequestForInvalidDateOnAll() throws Exception {
+        mockMvc.perform(get("/api/logs/all").param("from", "bad-date"))
+                .andExpect(status().isBadRequest());
+    }
 }

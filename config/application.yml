@@ -10,6 +10,7 @@ log-analyzer:
   max-cache-file-size-mb: 50        # файлы крупнее этого не кэшируются
   max-cached-files: 20              # максимум файлов одновременно в кэше (старые вытесняются)
   log-timezone: Europe/Moscow       # таймзона в которой записаны метки времени в лог-файлах
+  cors-allowed-origin: http://localhost:5173  # разрешённый origin для CORS (UI dev-сервер)
 
   sources:
 

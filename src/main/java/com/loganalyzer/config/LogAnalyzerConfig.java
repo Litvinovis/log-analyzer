@@ -13,6 +13,7 @@ public class LogAnalyzerConfig {
     private int maxCacheFileSizeMb = 50;
     private int maxCachedFiles = 20;
     private String logTimezone = "UTC";
+    private String corsAllowedOrigin = "http://localhost:5173";
     private List<Source> sources = new ArrayList<>();
 
     public String getSshKeyPath() { return sshKeyPath; }
@@ -29,6 +30,9 @@ public class LogAnalyzerConfig {
 
     public String getLogTimezone() { return logTimezone; }
     public void setLogTimezone(String v) { this.logTimezone = v; }
+
+    public String getCorsAllowedOrigin() { return corsAllowedOrigin; }
+    public void setCorsAllowedOrigin(String v) { this.corsAllowedOrigin = v; }
 
     public List<Source> getSources() { return sources; }
     public void setSources(List<Source> sources) { this.sources = sources; }
