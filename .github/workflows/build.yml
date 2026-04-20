@@ -1,0 +1,76 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run backend tests
+        run: mvn test
+
+      - name: Build JAR
+        run: mvn package -DskipTests
+
+      - name: Rename JAR with commit SHA (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          cp target/log-analyzer-1.0.0.jar \
+             target/log-analyzer-pr${{ github.event.pull_request.number }}-${SHORT_SHA}.jar
+
+      - name: Upload artifact (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-analyzer-pr${{ github.event.pull_request.number }}
+          path: target/log-analyzer-pr*.jar
+          retention-days: 30
+
+      - name: Create/update release (main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: |
+            Автоматическая сборка из ветки `main`.
+
+            **Запуск:**
+            ```bash
+            java -jar log-analyzer-1.0.0.jar \
+              --spring.config.location=file:/opt/log-analyzer/application.yml
+            ```
+
+            Коммит: ${{ github.sha }}
+          files: target/log-analyzer-1.0.0.jar
+          make_latest: true
+          prerelease: false
