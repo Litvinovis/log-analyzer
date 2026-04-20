@@ -12,6 +12,7 @@ public class LogAnalyzerConfig {
     private int cacheTtlSeconds = 300;
     private int maxCacheFileSizeMb = 50;
     private int maxCachedFiles = 20;
+    private String logTimezone = "UTC";
     private List<Source> sources = new ArrayList<>();
 
     public String getSshKeyPath() { return sshKeyPath; }
@@ -25,6 +26,9 @@ public class LogAnalyzerConfig {
 
     public int getMaxCachedFiles() { return maxCachedFiles; }
     public void setMaxCachedFiles(int v) { this.maxCachedFiles = v; }
+
+    public String getLogTimezone() { return logTimezone; }
+    public void setLogTimezone(String v) { this.logTimezone = v; }
 
     public List<Source> getSources() { return sources; }
     public void setSources(List<Source> sources) { this.sources = sources; }
