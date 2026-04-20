@@ -9,37 +9,57 @@ import static org.junit.jupiter.api.Assertions.*;
 class LogAnalyzerConfigTest {
 
     @Test
-    void shouldHaveDefaultEmptyLogPaths() {
+    void shouldHaveDefaultEmptySources() {
         LogAnalyzerConfig config = new LogAnalyzerConfig();
-        assertTrue(config.getLogPaths().isEmpty());
+        assertTrue(config.getSources().isEmpty());
     }
 
     @Test
-    void shouldSetAndGetLogPaths() {
+    void shouldSetAndGetSources() {
         LogAnalyzerConfig config = new LogAnalyzerConfig();
-        List<String> paths = List.of("/var/log/app1", "/var/log/app2");
-        config.setLogPaths(paths);
-        assertEquals(2, config.getLogPaths().size());
-        assertEquals("/var/log/app1", config.getLogPaths().get(0));
+        LogAnalyzerConfig.Source s = new LogAnalyzerConfig.Source();
+        s.setName("test-app");
+        s.setLogPath("/var/log/test");
+        s.setLogFormat(LogFormat.MICROSERVICE);
+        config.setSources(List.of(s));
+
+        assertEquals(1, config.getSources().size());
+        assertEquals("test-app", config.getSources().get(0).getName());
+        assertEquals(LogFormat.MICROSERVICE, config.getSources().get(0).getLogFormat());
     }
 
     @Test
     void shouldHaveDefaultCacheTtl() {
-        LogAnalyzerConfig config = new LogAnalyzerConfig();
-        assertEquals(300, config.getCacheTtlSeconds());
+        assertEquals(300, new LogAnalyzerConfig().getCacheTtlSeconds());
     }
 
     @Test
     void shouldHaveDefaultMaxCacheFileSize() {
-        LogAnalyzerConfig config = new LogAnalyzerConfig();
-        assertEquals(50, config.getMaxCacheFileSizeMb());
+        assertEquals(50, new LogAnalyzerConfig().getMaxCacheFileSizeMb());
     }
 
     @Test
-    void shouldSetLogPattern() {
+    void shouldHaveDefaultSourceConnectionLocal() {
+        LogAnalyzerConfig.Source s = new LogAnalyzerConfig.Source();
+        assertEquals(LogAnalyzerConfig.Source.ConnectionType.LOCAL, s.getConnection());
+    }
+
+    @Test
+    void shouldHaveDefaultLogFormatAuto() {
+        LogAnalyzerConfig.Source s = new LogAnalyzerConfig.Source();
+        assertEquals(LogFormat.AUTO, s.getLogFormat());
+    }
+
+    @Test
+    void shouldHaveDefaultSshPort() {
+        LogAnalyzerConfig.Source s = new LogAnalyzerConfig.Source();
+        assertEquals(22, s.getSshPort());
+    }
+
+    @Test
+    void shouldSetSshKeyPath() {
         LogAnalyzerConfig config = new LogAnalyzerConfig();
-        assertNull(config.getLogPattern());
-        config.setLogPattern("^(.+)$");
-        assertEquals("^(.+)$", config.getLogPattern());
+        config.setSshKeyPath("~/.ssh/id_rsa");
+        assertEquals("~/.ssh/id_rsa", config.getSshKeyPath());
     }
 }

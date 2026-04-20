@@ -1,6 +1,7 @@
 package com.loganalyzer.watcher;
 
 import com.loganalyzer.config.LogAnalyzerConfig;
+import com.loganalyzer.config.LogAnalyzerConfig.Source.ConnectionType;
 import com.loganalyzer.storage.LogStore;
 
 import java.io.IOException;
@@ -37,15 +38,15 @@ public class LogDirectoryWatcher {
     public void start() {
         try {
             watchService = FileSystems.getDefault().newWatchService();
-            for (String logPath : config.getLogPaths()) {
-                registerAll(Paths.get(logPath));
+            for (LogAnalyzerConfig.Source source : config.getSources()) {
+                if (source.getConnection() == ConnectionType.LOCAL) {
+                    registerAll(Paths.get(source.getLogPath()));
+                }
             }
             Thread thread = new Thread(this::watch, "log-watcher");
             thread.setDaemon(true);
             thread.start();
-        } catch (IOException ignored) {
-            // log paths may not exist at startup — watcher simply won't run
-        }
+        } catch (IOException ignored) {}
     }
 
     private void registerAll(Path root) throws IOException {

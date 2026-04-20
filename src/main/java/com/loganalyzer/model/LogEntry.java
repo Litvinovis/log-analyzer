@@ -7,6 +7,12 @@ public record LogEntry(
         String level,
         String app,
         String message,
-        String sourceFile
+        String sourceFile,
+        String threadName,
+        String loggerName,
+        String stackTrace
 ) {
+    public LogEntry(Instant timestamp, String level, String app, String message, String sourceFile) {
+        this(timestamp, level, app, message, sourceFile, null, null, null);
+    }
 }

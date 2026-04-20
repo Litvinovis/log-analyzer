@@ -2,10 +2,29 @@ server:
   port: 8080
 
 log-analyzer:
-  log-paths:
-    - /var/log/app
+  ssh-key-path: ~/.ssh/id_rsa
   cache-ttl-seconds: 300
   max-cache-file-size-mb: 50
+  sources:
+    - name: ignite-node-1
+      log-path: /opt/ignite/work/log
+      connection: LOCAL
+      log-format: IGNITE
+      watch-levels: [ERROR, WARN]
+    - name: order-service
+      log-path: /var/log/order-service/logs
+      connection: LOCAL
+      log-format: MICROSERVICE
+      watch-levels: [ERROR]
+    # Пример удалённого микросервиса по SSH:
+    # - name: payment-service
+    #   log-path: /opt/payment/logs
+    #   connection: SSH
+    #   ssh-host: 10.0.0.6
+    #   ssh-port: 22
+    #   ssh-user: deploy
+    #   log-format: MICROSERVICE
+    #   watch-levels: [ERROR, WARN]
 
 spring:
   application:
