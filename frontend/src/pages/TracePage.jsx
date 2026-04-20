@@ -13,6 +13,15 @@ const { Text, Paragraph } = Typography
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+const TIME_WINDOWS = [
+  { value: 10,    label: '10 минут' },
+  { value: 30,    label: '30 минут' },
+  { value: 60,    label: '1 час' },
+  { value: 120,   label: '2 часа' },
+  { value: 480,   label: '8 часов' },
+  { value: 1440,  label: '24 часа' },
+]
+
 const entryColumns = [
   {
     title: 'Время',
@@ -63,13 +72,20 @@ export default function TracePage() {
   const [searchedId, setSearchedId] = useState('')
 
   const search = async () => {
-    const { traceId, app } = form.getFieldsValue()
+    const { traceId, app, windowMinutes } = form.getFieldsValue()
     if (!traceId?.trim()) return
     setLoading(true)
     setError(null)
     setSearchedId(traceId.trim())
     try {
-      const data = await logsApi.trace(traceId.trim(), app?.join(',') || undefined)
+      const to = new Date()
+      const from = new Date(to.getTime() - windowMinutes * 60 * 1000)
+      const data = await logsApi.trace(
+        traceId.trim(),
+        app?.join(',') || undefined,
+        from.toISOString(),
+        to.toISOString(),
+      )
       setResults(data)
     } catch (e) {
       setError(e.message)
@@ -103,7 +119,7 @@ export default function TracePage() {
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Card title="Поиск транзакции по UUID">
-        <Form form={form} layout="inline" onFinish={search}>
+        <Form form={form} layout="inline" onFinish={search} initialValues={{ windowMinutes: 10 }}>
           <Form.Item
             name="traceId"
             label="Transaction ID"
@@ -118,8 +134,11 @@ export default function TracePage() {
               allowClear
             />
           </Form.Item>
-          <Form.Item name="app" label="Приложения (необязательно)" style={{ minWidth: 260 }}>
-            <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} style={{ width: 260 }} />
+          <Form.Item name="windowMinutes" label="Глубина поиска">
+            <Select style={{ width: 130 }} options={TIME_WINDOWS} />
+          </Form.Item>
+          <Form.Item name="app" label="Приложения">
+            <Select mode="multiple" placeholder="Все" allowClear options={appOptions} style={{ width: 240 }} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
