@@ -7,6 +7,7 @@ import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
+import { useApps } from '../hooks/useApps'
 
 const { RangePicker } = DatePicker
 const { Text, Paragraph } = Typography
@@ -30,6 +31,7 @@ function getAppColor(app) {
 }
 
 export default function StreamPage() {
+  const appOptions = useApps()
   const [form] = Form.useForm()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -40,7 +42,7 @@ export default function StreamPage() {
     const values = form.getFieldsValue()
     const [from, to] = values.range || []
     const params = {
-      app: values.app || undefined,
+      app: values.app?.join(',') || undefined,
       from: from ? from.toISOString() : undefined,
       to:   to   ? to.toISOString()   : undefined,
       levels: values.levels?.join(',') || undefined,
@@ -141,7 +143,7 @@ export default function StreamPage() {
           <Row gutter={16}>
             <Col span={6}>
               <Form.Item name="app" label="Приложение">
-                <Input placeholder="order-service, ignite-node-1" allowClear />
+                <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} />
               </Form.Item>
             </Col>
             <Col span={6}>

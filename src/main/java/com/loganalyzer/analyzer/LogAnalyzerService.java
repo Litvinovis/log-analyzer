@@ -12,6 +12,8 @@ import com.loganalyzer.parser.LogFileParser;
 import com.loganalyzer.ssh.SshLogReader;
 import com.loganalyzer.storage.LogStore;
 
+import jakarta.annotation.PostConstruct;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -31,12 +33,16 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
 public class LogAnalyzerService {
+
+    private static final Logger log = LoggerFactory.getLogger(LogAnalyzerService.class);
 
     private final LogAnalyzerConfig config;
     private final LogFileParser parser;
@@ -63,6 +69,37 @@ public class LogAnalyzerService {
         this(config, parser, store, null, Runnable::run);
     }
 
+    @PostConstruct
+    public void logConfig() {
+        log.info("=== Log Analyzer configuration ===");
+        log.info("SSH key path : {}", config.getSshKeyPath());
+        log.info("Cache TTL    : {} s", config.getCacheTtlSeconds());
+        log.info("Max cache    : {} MB", config.getMaxCacheFileSizeMb());
+        log.info("Sources ({}):", config.getSources().size());
+        for (LogAnalyzerConfig.Source s : config.getSources()) {
+            log.info("  [{}] connection={} format={} path={} watchLevels={}",
+                    s.getName(), s.getConnection(), s.getLogFormat(),
+                    s.getLogPath(), s.getWatchLevels());
+            if (s.getConnection() == ConnectionType.SSH) {
+                log.info("    ssh={}@{}:{}", s.getSshUser(), s.getSshHost(), s.getSshPort());
+            } else {
+                Path p = Paths.get(s.getLogPath());
+                if (Files.exists(p)) {
+                    log.info("    path exists: {}", p.toAbsolutePath());
+                } else {
+                    log.warn("    path NOT FOUND: {}", p.toAbsolutePath());
+                }
+            }
+        }
+        log.info("==================================");
+    }
+
+    public List<String> getConfiguredApps() {
+        return config.getSources().stream()
+                .map(LogAnalyzerConfig.Source::getName)
+                .toList();
+    }
+
     public List<LogAnalysisResult> analyzeErrors(
             List<String> apps, Instant from, Instant to, List<String> levels, String contains) {
 
@@ -71,12 +108,17 @@ public class LogAnalyzerService {
                 .filter(s -> appSet == null || appSet.contains(s.getName()))
                 .toList();
 
+        log.debug("analyzeErrors: apps={} from={} to={} levels={} contains={} — querying {} source(s)",
+                apps, from, to, levels, contains, sources.size());
+
         List<CompletableFuture<Optional<LogAnalysisResult>>> futures = sources.stream()
                 .map(source -> CompletableFuture.supplyAsync(() -> {
                     List<LogEntry> all = loadEntries(source);
                     List<String> effectiveLevels = (levels != null && !levels.isEmpty())
                             ? levels : source.getWatchLevels();
+                    log.debug("[{}] loaded {} entries, filtering with levels={}", source.getName(), all.size(), effectiveLevels);
                     ParseResult parsed = applyFilters(all, from, to, effectiveLevels, contains);
+                    log.debug("[{}] after filter: {} entries matched", source.getName(), parsed.errors().size());
                     if (parsed.errors().isEmpty()) return Optional.<LogAnalysisResult>empty();
                     return Optional.of(new LogAnalysisResult(
                             source.getName(), Instant.now(),
@@ -91,26 +133,61 @@ public class LogAnalyzerService {
                 .toList();
     }
 
-    /**
-     * Finds all log entries across sources that contain the given traceId (UUID).
-     * Searches message and stackTrace fields. No level filter — returns all levels.
-     */
     public List<TraceResult> findByTraceId(String traceId, List<String> apps) {
         List<TraceResult> results = new ArrayList<>();
         Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
 
-        for (LogAnalyzerConfig.Source source : config.getSources()) {
-            if (appSet != null && !appSet.contains(source.getName())) continue;
+        List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
+                .filter(s -> appSet == null || appSet.contains(s.getName()))
+                .toList();
 
-            List<LogEntry> matching = loadEntries(source).stream()
+        log.debug("findByTraceId: traceId='{}' apps={} — searching {} source(s)", traceId, apps, sources.size());
+
+        for (LogAnalyzerConfig.Source source : sources) {
+            List<LogEntry> all = loadEntries(source);
+            log.debug("[{}] loaded {} entries, searching for '{}'", source.getName(), all.size(), traceId);
+            List<LogEntry> matching = all.stream()
                     .filter(e -> mentionsId(e, traceId))
                     .toList();
-
+            log.debug("[{}] found {} entries containing traceId", source.getName(), matching.size());
             if (!matching.isEmpty()) {
                 results.add(new TraceResult(source.getName(), matching));
             }
         }
         return results;
+    }
+
+    public List<LogEntry> getAllEntries(
+            List<String> apps, Instant from, Instant to, List<String> levels, String contains) {
+
+        Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
+        List<String> effectiveLevels = (levels != null && !levels.isEmpty()) ? levels : null;
+        List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
+                .filter(s -> appSet == null || appSet.contains(s.getName()))
+                .toList();
+
+        log.debug("getAllEntries: apps={} from={} to={} levels={} contains={} — querying {} source(s)",
+                apps, from, to, levels, contains, sources.size());
+
+        List<CompletableFuture<List<LogEntry>>> futures = sources.stream()
+                .map(source -> CompletableFuture.supplyAsync(() -> {
+                    List<LogEntry> all = loadEntries(source);
+                    List<LogEntry> filtered = all.stream()
+                            .filter(e -> effectiveLevels == null
+                                    || effectiveLevels.stream().anyMatch(l -> l.equalsIgnoreCase(e.level())))
+                            .filter(e -> from == null || !e.timestamp().isBefore(from))
+                            .filter(e -> to == null || !e.timestamp().isAfter(to))
+                            .filter(e -> contains == null || mentionsId(e, contains))
+                            .toList();
+                    log.debug("[{}] loaded {} entries, after filter: {}", source.getName(), all.size(), filtered.size());
+                    return filtered;
+                }, executor))
+                .toList();
+
+        return futures.stream()
+                .flatMap(f -> f.join().stream())
+                .sorted(java.util.Comparator.comparing(LogEntry::timestamp))
+                .toList();
     }
 
     public LogStats getStats(List<String> apps, Instant from, Instant to) {
@@ -149,40 +226,15 @@ public class LogAnalyzerService {
     public void analyzeAsync(String jobId, List<String> apps, Instant from, Instant to,
                              List<String> levels, String contains) {
         jobs.put(jobId, new JobEntry("RUNNING", null));
+        log.debug("analyzeAsync: jobId={} started", jobId);
         try {
             List<LogAnalysisResult> results = analyzeErrors(apps, from, to, levels, contains);
             jobs.put(jobId, new JobEntry("COMPLETED", results));
+            log.debug("analyzeAsync: jobId={} completed, {} results", jobId, results.size());
         } catch (Exception e) {
+            log.error("analyzeAsync: jobId={} failed", jobId, e);
             jobs.put(jobId, new JobEntry("FAILED", null));
         }
-    }
-
-    public List<LogEntry> getAllEntries(
-            List<String> apps, Instant from, Instant to, List<String> levels, String contains) {
-
-        Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
-        List<String> effectiveLevels = (levels != null && !levels.isEmpty()) ? levels : null;
-        List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
-                .filter(s -> appSet == null || appSet.contains(s.getName()))
-                .toList();
-
-        List<CompletableFuture<List<LogEntry>>> futures = sources.stream()
-                .map(source -> CompletableFuture.supplyAsync(() -> {
-                    List<LogEntry> all = loadEntries(source);
-                    return all.stream()
-                            .filter(e -> effectiveLevels == null
-                                    || effectiveLevels.stream().anyMatch(l -> l.equalsIgnoreCase(e.level())))
-                            .filter(e -> from == null || !e.timestamp().isBefore(from))
-                            .filter(e -> to == null || !e.timestamp().isAfter(to))
-                            .filter(e -> contains == null || mentionsId(e, contains))
-                            .toList();
-                }, executor))
-                .toList();
-
-        return futures.stream()
-                .flatMap(f -> f.join().stream())
-                .sorted(java.util.Comparator.comparing(LogEntry::timestamp))
-                .toList();
     }
 
     public Optional<JobResponse> getJob(String jobId) {
@@ -200,10 +252,23 @@ public class LogAnalyzerService {
     private List<LogEntry> loadLocalEntries(LogAnalyzerConfig.Source source) {
         List<LogEntry> all = new ArrayList<>();
         Path basePath = Paths.get(source.getLogPath());
-        if (!Files.exists(basePath)) return all;
 
-        for (Path logFile : findLocalLogFiles(basePath)) {
+        if (!Files.exists(basePath)) {
+            log.warn("[{}] log path does not exist: {}", source.getName(), basePath.toAbsolutePath());
+            return all;
+        }
+        if (!Files.isDirectory(basePath)) {
+            log.warn("[{}] log path is not a directory: {}", source.getName(), basePath.toAbsolutePath());
+            return all;
+        }
+
+        List<Path> logFiles = findLocalLogFiles(basePath);
+        log.debug("[{}] found {} log file(s) in {}", source.getName(), logFiles.size(), basePath);
+
+        for (Path logFile : logFiles) {
+            log.debug("[{}] parsing: {}", source.getName(), logFile);
             List<LogEntry> entries = cachedOrParse(logFile, source.getName(), source.getLogFormat());
+            log.debug("[{}] parsed {} entries from {}", source.getName(), entries.size(), logFile.getFileName());
             all.addAll(entries);
         }
         return all;
@@ -216,8 +281,11 @@ public class LogAnalyzerService {
             if (fileSize <= maxBytes) {
                 return store.getOrLoad(logFile, () -> parseLocalFile(logFile, appName, format));
             }
+            log.debug("File {} ({} MB) exceeds cache limit, parsing without cache",
+                    logFile.getFileName(), fileSize / 1024 / 1024);
             return parseLocalFile(logFile, appName, format);
         } catch (IOException | UncheckedIOException e) {
+            log.error("Failed to read file {}: {}", logFile, e.getMessage());
             return List.of();
         }
     }
@@ -235,19 +303,24 @@ public class LogAnalyzerService {
     private List<LogEntry> loadRemoteEntries(LogAnalyzerConfig.Source source) {
         if (sshLogReader == null) return List.of();
 
+        log.debug("[{}] listing remote files at {}", source.getName(), source.getLogPath());
         List<String> remoteFiles = new ArrayList<>(
                 sshLogReader.listRemoteFiles(source, source.getLogPath()));
 
-        // For Ignite: also check archive subdirectory
         if (source.getLogFormat() == LogFormat.IGNITE || source.getLogFormat() == LogFormat.AUTO) {
-            remoteFiles.addAll(
-                    sshLogReader.listRemoteFiles(source, source.getLogPath() + "/archive"));
+            String archivePath = source.getLogPath() + "/archive";
+            log.debug("[{}] listing Ignite archive at {}", source.getName(), archivePath);
+            remoteFiles.addAll(sshLogReader.listRemoteFiles(source, archivePath));
         }
 
+        log.debug("[{}] found {} remote file(s)", source.getName(), remoteFiles.size());
         List<LogEntry> all = new ArrayList<>();
         for (String remotePath : remoteFiles) {
+            log.debug("[{}] reading remote file: {}", source.getName(), remotePath);
             List<String> lines = sshLogReader.readRemoteLines(source, remotePath);
-            all.addAll(parser.parseLines(lines, source.getName(), remotePath, source.getLogFormat()));
+            List<LogEntry> entries = parser.parseLines(lines, source.getName(), remotePath, source.getLogFormat());
+            log.debug("[{}] parsed {} entries from {}", source.getName(), entries.size(), remotePath);
+            all.addAll(entries);
         }
         return all;
     }
