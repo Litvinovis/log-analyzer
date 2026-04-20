@@ -56,7 +56,6 @@ public class LogAnalyzerConfig {
         private String sshHost;
         private int sshPort = 22;
         private String sshUser;
-        private List<String> watchLevels = new ArrayList<>();
         private LogFormat logFormat = LogFormat.AUTO;
 
         public String getName() { return name; }
@@ -76,9 +75,6 @@ public class LogAnalyzerConfig {
 
         public String getSshUser() { return sshUser; }
         public void setSshUser(String sshUser) { this.sshUser = sshUser; }
-
-        public List<String> getWatchLevels() { return watchLevels; }
-        public void setWatchLevels(List<String> watchLevels) { this.watchLevels = watchLevels; }
 
         public LogFormat getLogFormat() { return logFormat; }
         public void setLogFormat(LogFormat logFormat) { this.logFormat = logFormat; }

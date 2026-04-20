@@ -84,9 +84,8 @@ public class LogAnalyzerService {
         log.info("Min free heap       : {} MB", config.getMinFreeHeapMb());
         log.info("Sources ({}):", config.getSources().size());
         for (LogAnalyzerConfig.Source s : config.getSources()) {
-            log.info("  [{}] connection={} format={} path={} watchLevels={}",
-                    s.getName(), s.getConnection(), s.getLogFormat(),
-                    s.getLogPath(), s.getWatchLevels());
+            log.info("  [{}] connection={} format={} path={}",
+                    s.getName(), s.getConnection(), s.getLogFormat(), s.getLogPath());
             if (s.getConnection() == ConnectionType.SSH) {
                 log.info("    ssh={}@{}:{}", s.getSshUser(), s.getSshHost(), s.getSshPort());
             } else {
@@ -121,10 +120,8 @@ public class LogAnalyzerService {
         List<CompletableFuture<Optional<LogAnalysisResult>>> futures = sources.stream()
                 .map(source -> CompletableFuture.supplyAsync(() -> {
                     List<LogEntry> all = loadEntries(source, from, to);
-                    List<String> effectiveLevels = (levels != null && !levels.isEmpty())
-                            ? levels : source.getWatchLevels();
-                    log.debug("[{}] loaded {} entries, filtering with levels={}", source.getName(), all.size(), effectiveLevels);
-                    ParseResult parsed = applyFilters(all, from, to, effectiveLevels, contains);
+                    log.debug("[{}] loaded {} entries, filtering with levels={}", source.getName(), all.size(), levels);
+                    ParseResult parsed = applyFilters(all, from, to, levels, contains);
                     log.debug("[{}] after filter: {} entries matched", source.getName(), parsed.errors().size());
                     if (parsed.errors().isEmpty()) return Optional.<LogAnalysisResult>empty();
                     return Optional.of(new LogAnalysisResult(

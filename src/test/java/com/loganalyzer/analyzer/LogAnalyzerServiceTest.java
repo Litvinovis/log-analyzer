@@ -246,7 +246,7 @@ class LogAnalyzerServiceTest {
                 "2026-04-17 00:00:14.656 [INFO ][Thread-OnlineFactsKafkaLoader][OnlineFactRegistryImpl] Команда на удаление\n" +
                 "2026-04-19 15:34:05.009 [DEBUG][clean-scheduler-1][TemporaryHotProfileCacheImpl] Добавлен ключ\n");
 
-        // with watchLevels empty, default is ERROR+FATAL — no errors in this data
+        // default levels are ERROR+FATAL — no errors in this data
         List<LogAnalysisResult> results = service.analyzeErrors(List.of("ignite-node"), null, null, null, null);
         assertTrue(results.isEmpty());
 

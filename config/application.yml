@@ -22,14 +22,12 @@ log-analyzer:
       log-path: /opt/ignite/work/log
       connection: LOCAL
       log-format: IGNITE             # IGNITE | MICROSERVICE | AUTO
-      watch-levels: [ERROR, WARN]    # уровни по умолчанию (без явного ?levels=)
 
     # --- Локальный микросервис ---
     - name: order-service
       log-path: /var/log/order-service/logs
       connection: LOCAL
       log-format: MICROSERVICE
-      watch-levels: [ERROR]
 
     # --- Удалённый микросервис по SSH ---
     - name: payment-service
@@ -39,7 +37,6 @@ log-analyzer:
       ssh-port: 22
       ssh-user: ubuntu
       log-format: MICROSERVICE
-      watch-levels: [ERROR, WARN]
 
     # --- Удалённый Ignite по SSH ---
     - name: ignite-node-2
@@ -49,4 +46,3 @@ log-analyzer:
       ssh-port: 22
       ssh-user: ubuntu
       log-format: IGNITE
-      watch-levels: [ERROR, WARN]
