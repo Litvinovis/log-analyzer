@@ -6,14 +6,14 @@ JAR_FILE="log-analyzer-1.0.0.jar"
 
 COMMANDLINE="/usr/lib/jvm/jre-21/bin/java \
             -Dcom.sun.management.jmxremote \
-            -Dcom.sun.management.jmxremote.port=9081 \
+            -Dcom.sun.management.jmxremote.port=19485 \
             -Dcom.sun.management.jmxremote.local.only=false \
             -Dcom.sun.management.jmxremote.authenticate=false \
             -Dcom.sun.management.jmxremote.access.file=/u01/fraudmon/security/jmxremote.access \
             -Dcom.sun.management.jmxremote.password.file=/u01/fraudmon/security/jmxremote.password \
             -Dcom.sun.management.jmxremote.ssl=false \
-            -Xms128m -Xmx512m -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5021 \
-            -Dserver.port=8080 \
+            -Xms128m -Xmx512m -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=15485 \
+            -Dserver.port=18765 \
             -Dserver.tomcat.threads.max=16 \
             --add-opens=java.base/java.nio=ALL-UNNAMED \
             --add-opens=java.base/java.time=ALL-UNNAMED \
