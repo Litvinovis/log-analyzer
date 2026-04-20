@@ -1,0 +1,46 @@
+server:
+  port: 18765
+  tomcat:
+    threads:
+      max: 16
+
+log-analyzer:
+  ssh-key-path: ~/.ssh/id_rsa      # путь к SSH-ключу для удалённых источников
+  cache-ttl-seconds: 300            # TTL кэша файлов в секундах
+  max-cache-file-size-mb: 50        # файлы крупнее этого не кэшируются
+
+  sources:
+
+    # --- Локальный кластер Apache Ignite ---
+    - name: ignite-node-1
+      log-path: /opt/ignite/work/log
+      connection: LOCAL
+      log-format: IGNITE             # IGNITE | MICROSERVICE | AUTO
+      watch-levels: [ERROR, WARN]    # уровни по умолчанию (без явного ?levels=)
+
+    # --- Локальный микросервис ---
+    - name: order-service
+      log-path: /var/log/order-service/logs
+      connection: LOCAL
+      log-format: MICROSERVICE
+      watch-levels: [ERROR]
+
+    # --- Удалённый микросервис по SSH ---
+    - name: payment-service
+      log-path: /opt/payment/logs
+      connection: SSH
+      ssh-host: 10.0.0.5
+      ssh-port: 22
+      ssh-user: ubuntu
+      log-format: MICROSERVICE
+      watch-levels: [ERROR, WARN]
+
+    # --- Удалённый Ignite по SSH ---
+    - name: ignite-node-2
+      log-path: /opt/ignite/work/log
+      connection: SSH
+      ssh-host: 10.0.0.6
+      ssh-port: 22
+      ssh-user: ubuntu
+      log-format: IGNITE
+      watch-levels: [ERROR, WARN]
