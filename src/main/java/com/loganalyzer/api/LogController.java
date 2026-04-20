@@ -3,6 +3,7 @@ package com.loganalyzer.api;
 import com.loganalyzer.analyzer.LogAnalyzerService;
 import com.loganalyzer.model.JobResponse;
 import com.loganalyzer.model.LogAnalysisResult;
+import com.loganalyzer.model.LogEntry;
 import com.loganalyzer.model.LogQuery;
 import com.loganalyzer.model.LogStats;
 import com.loganalyzer.model.PagedResult;
@@ -102,6 +103,28 @@ public class LogController {
         List<String> apps = app != null ? List.of(app.split(",")) : List.of();
         List<TraceResult> results = analyzerService.findByTraceId(traceId, apps);
         return ResponseEntity.ok(results);
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<PagedResult<LogEntry>> getAllEntries(
+            @RequestParam(required = false) String app,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) List<String> levels,
+            @RequestParam(required = false) String contains,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+
+        List<String> apps = app != null ? List.of(app.split(",")) : List.of();
+        Instant fromInstant = from != null && !from.isBlank() ? Instant.parse(from) : null;
+        Instant toInstant   = to   != null && !to.isBlank()   ? Instant.parse(to)   : null;
+
+        List<LogEntry> all = analyzerService.getAllEntries(apps, fromInstant, toInstant, levels, contains);
+        int total      = all.size();
+        int totalPages = size > 0 ? (int) Math.ceil((double) total / size) : 1;
+        List<LogEntry> paged = all.stream().skip((long) page * size).limit(size).toList();
+
+        return ResponseEntity.ok(new PagedResult<>(paged, page, size, total, totalPages));
     }
 
     @GetMapping("/health")
