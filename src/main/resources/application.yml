@@ -10,12 +10,10 @@ log-analyzer:
       log-path: /opt/ignite/work/log
       connection: LOCAL
       log-format: IGNITE
-      watch-levels: [ERROR, WARN]
-    - name: order-service
+          - name: order-service
       log-path: /var/log/order-service/logs
       connection: LOCAL
       log-format: MICROSERVICE
-      watch-levels: [ERROR]
     # Пример удалённого микросервиса по SSH:
     # - name: payment-service
     #   log-path: /opt/payment/logs
@@ -24,8 +22,7 @@ log-analyzer:
     #   ssh-port: 22
     #   ssh-user: deploy
     #   log-format: MICROSERVICE
-    #   watch-levels: [ERROR, WARN]
-
+    #   
 spring:
   application:
     name: log-analyzer
