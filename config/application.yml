@@ -8,6 +8,7 @@ log-analyzer:
   ssh-key-path: ~/.ssh/id_rsa      # путь к SSH-ключу для удалённых источников
   cache-ttl-seconds: 300            # TTL кэша файлов в секундах
   max-cache-file-size-mb: 50        # файлы крупнее этого не кэшируются
+  max-cached-files: 20              # максимум файлов одновременно в кэше (старые вытесняются)
 
   sources:
 

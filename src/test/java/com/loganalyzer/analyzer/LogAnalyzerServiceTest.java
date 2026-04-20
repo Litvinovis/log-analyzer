@@ -139,7 +139,7 @@ class LogAnalyzerServiceTest {
     @Test
     void shouldFindByTraceId() throws IOException {
         LogAnalyzerService service = createService();
-        List<TraceResult> results = service.findByTraceId(UUID_1, null);
+        List<TraceResult> results = service.findByTraceId(UUID_1, null, null, null);
 
         assertEquals(1, results.size());
         assertEquals("svc1", results.get(0).app());
@@ -169,7 +169,7 @@ class LogAnalyzerServiceTest {
         config.setSources(List.of(s1, s2));
 
         LogAnalyzerService service = new LogAnalyzerService(config, new LogFileParser(), new LogStore());
-        List<TraceResult> results = service.findByTraceId(UUID_1, null);
+        List<TraceResult> results = service.findByTraceId(UUID_1, null, null, null);
 
         assertEquals(2, results.size());
     }

@@ -46,10 +46,11 @@ public class LogFileParser {
     public LogFileParser() {}
 
     /**
-     * Main multi-line parser: groups continuation lines (stack traces, JSON bodies)
-     * into the stackTrace field of the preceding entry.
+     * Main multi-line parser. Accepts any Iterable<String> so callers can pass
+     * a List or a Stream::iterator without loading the whole file into memory first.
+     * Groups continuation lines (stack traces, JSON) into the stackTrace field.
      */
-    public List<LogEntry> parseLines(List<String> lines, String appName, String sourceFile, LogFormat format) {
+    public List<LogEntry> parseLines(Iterable<String> lines, String appName, String sourceFile, LogFormat format) {
         List<LogEntry> result = new ArrayList<>();
         LogEntry current = null;
         StringBuilder continuation = new StringBuilder();
@@ -57,7 +58,6 @@ public class LogFileParser {
         for (String line : lines) {
             if (line == null) continue;
             if (line.isBlank()) {
-                // blank lines separate entries but don't belong to continuation
                 if (current != null) {
                     result.add(withStackTrace(current, continuation.toString()));
                     current = null;
@@ -81,6 +81,60 @@ public class LogFileParser {
             result.add(withStackTrace(current, continuation.toString()));
         }
         return result;
+    }
+
+    /**
+     * Variant with inline time filtering: entries outside [from, to] are discarded during parse,
+     * so they never accumulate in memory. Intended for large files that bypass the cache.
+     * Since log files are chronologically ordered, parsing stops early when timestamp > to.
+     */
+    public List<LogEntry> parseLines(Iterable<String> lines, String appName, String sourceFile,
+                                     LogFormat format, Instant from, Instant to) {
+        List<LogEntry> result = new ArrayList<>();
+        LogEntry current = null;
+        StringBuilder continuation = new StringBuilder();
+
+        for (String line : lines) {
+            if (line == null) continue;
+            if (line.isBlank()) {
+                if (current != null) {
+                    addIfInRange(result, withStackTrace(current, continuation.toString()), from, to);
+                    current = null;
+                    continuation.setLength(0);
+                }
+                continue;
+            }
+
+            if (ENTRY_START.matcher(line).find()) {
+                if (current != null) {
+                    addIfInRange(result, withStackTrace(current, continuation.toString()), from, to);
+                    continuation.setLength(0);
+                }
+                LogEntry next = parseLine(line, appName, sourceFile, format);
+                // Early exit: file is sorted chronologically, so nothing after this will be in range
+                if (next != null && to != null && next.timestamp().isAfter(to)) break;
+                current = next;
+            } else if (current != null) {
+                if (!continuation.isEmpty()) continuation.append('\n');
+                continuation.append(line);
+            }
+        }
+        if (current != null) {
+            addIfInRange(result, withStackTrace(current, continuation.toString()), from, to);
+        }
+        return result;
+    }
+
+    private void addIfInRange(List<LogEntry> result, LogEntry e, Instant from, Instant to) {
+        if (e == null) return;
+        if (from != null && e.timestamp().isBefore(from)) return;
+        if (to != null && e.timestamp().isAfter(to)) return;
+        result.add(e);
+    }
+
+    // Backward-compat overload for List<String>
+    public List<LogEntry> parseLines(List<String> lines, String appName, String sourceFile, LogFormat format) {
+        return parseLines((Iterable<String>) lines, appName, sourceFile, format);
     }
 
     private LogEntry withStackTrace(LogEntry e, String st) {
@@ -125,12 +179,24 @@ public class LogFileParser {
         return parseLine(line, appName, sourceFile.toString(), LogFormat.AUTO);
     }
 
+    /**
+     * Reads the file line-by-line using a stream (avoids loading all lines into memory first).
+     */
     public List<LogEntry> parseWithFormat(Path filePath, String appName, LogFormat format) throws IOException {
+        return parseWithFormat(filePath, appName, format, null, null);
+    }
+
+    public List<LogEntry> parseWithFormat(Path filePath, String appName, LogFormat format,
+                                          Instant from, Instant to) throws IOException {
         if (filePath.getFileName().toString().endsWith(".gz")) {
-            return parseGzFile(filePath, appName, format);
+            return parseGzFile(filePath, appName, format, from, to);
         }
-        List<String> lines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
-        return parseLines(lines, appName, filePath.toString(), format);
+        try (Stream<String> lines = Files.lines(filePath, StandardCharsets.UTF_8)) {
+            if (from != null || to != null) {
+                return parseLines(lines::iterator, appName, filePath.toString(), format, from, to);
+            }
+            return parseLines(lines::iterator, appName, filePath.toString(), format);
+        }
     }
 
     public List<LogEntry> parse(Path filePath, String appName) throws IOException {
@@ -138,11 +204,18 @@ public class LogFileParser {
     }
 
     public List<LogEntry> parseGzFile(Path filePath, String appName, LogFormat format) throws IOException {
+        return parseGzFile(filePath, appName, format, null, null);
+    }
+
+    public List<LogEntry> parseGzFile(Path filePath, String appName, LogFormat format,
+                                      Instant from, Instant to) throws IOException {
         try (var is = Files.newInputStream(filePath);
              var gz = new GZIPInputStream(is);
              var reader = new BufferedReader(new InputStreamReader(gz, StandardCharsets.UTF_8))) {
-            List<String> lines = reader.lines().toList();
-            return parseLines(lines, appName, filePath.toString(), format);
+            if (from != null || to != null) {
+                return parseLines(reader.lines()::iterator, appName, filePath.toString(), format, from, to);
+            }
+            return parseLines(reader.lines()::iterator, appName, filePath.toString(), format);
         }
     }
 
