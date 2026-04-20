@@ -113,7 +113,7 @@ public class LogAnalyzerService {
 
         List<CompletableFuture<Optional<LogAnalysisResult>>> futures = sources.stream()
                 .map(source -> CompletableFuture.supplyAsync(() -> {
-                    List<LogEntry> all = loadEntries(source);
+                    List<LogEntry> all = loadEntries(source, from);
                     List<String> effectiveLevels = (levels != null && !levels.isEmpty())
                             ? levels : source.getWatchLevels();
                     log.debug("[{}] loaded {} entries, filtering with levels={}", source.getName(), all.size(), effectiveLevels);
@@ -145,7 +145,7 @@ public class LogAnalyzerService {
                 traceId, apps, from, to, sources.size());
 
         for (LogAnalyzerConfig.Source source : sources) {
-            List<LogEntry> all = loadEntries(source);
+            List<LogEntry> all = loadEntries(source, null);
             log.debug("[{}] loaded {} entries, searching for '{}'", source.getName(), all.size(), traceId);
             List<LogEntry> matching = all.stream()
                     .filter(e -> from == null || !e.timestamp().isBefore(from))
@@ -174,7 +174,7 @@ public class LogAnalyzerService {
 
         List<CompletableFuture<List<LogEntry>>> futures = sources.stream()
                 .map(source -> CompletableFuture.supplyAsync(() -> {
-                    List<LogEntry> all = loadEntries(source);
+                    List<LogEntry> all = loadEntries(source, from);
                     List<LogEntry> filtered = all.stream()
                             .filter(e -> effectiveLevels == null
                                     || effectiveLevels.stream().anyMatch(l -> l.equalsIgnoreCase(e.level())))
@@ -245,14 +245,14 @@ public class LogAnalyzerService {
                 .map(j -> new JobResponse(jobId, j.status(), j.results()));
     }
 
-    private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source) {
+    private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source, Instant from) {
         if (source.getConnection() == ConnectionType.SSH) {
-            return loadRemoteEntries(source);
+            return loadRemoteEntries(source, from);
         }
-        return loadLocalEntries(source);
+        return loadLocalEntries(source, from);
     }
 
-    private List<LogEntry> loadLocalEntries(LogAnalyzerConfig.Source source) {
+    private List<LogEntry> loadLocalEntries(LogAnalyzerConfig.Source source, Instant from) {
         List<LogEntry> all = new ArrayList<>();
         Path basePath = Paths.get(source.getLogPath());
 
@@ -269,12 +269,24 @@ public class LogAnalyzerService {
         log.debug("[{}] found {} log file(s) in {}", source.getName(), logFiles.size(), basePath);
 
         for (Path logFile : logFiles) {
+            if (from != null && !isFileRelevant(logFile, from)) {
+                log.debug("[{}] skip (last modified before window): {}", source.getName(), logFile.getFileName());
+                continue;
+            }
             log.debug("[{}] parsing: {}", source.getName(), logFile);
             List<LogEntry> entries = cachedOrParse(logFile, source.getName(), source.getLogFormat());
             log.debug("[{}] parsed {} entries from {}", source.getName(), entries.size(), logFile.getFileName());
             all.addAll(entries);
         }
         return all;
+    }
+
+    private boolean isFileRelevant(Path file, Instant from) {
+        try {
+            return !Files.getLastModifiedTime(file).toInstant().isBefore(from);
+        } catch (IOException e) {
+            return true;
+        }
     }
 
     private List<LogEntry> cachedOrParse(Path logFile, String appName, LogFormat format) {
@@ -303,17 +315,17 @@ public class LogAnalyzerService {
         }
     }
 
-    private List<LogEntry> loadRemoteEntries(LogAnalyzerConfig.Source source) {
+    private List<LogEntry> loadRemoteEntries(LogAnalyzerConfig.Source source, Instant from) {
         if (sshLogReader == null) return List.of();
 
         log.debug("[{}] listing remote files at {}", source.getName(), source.getLogPath());
         List<String> remoteFiles = new ArrayList<>(
-                sshLogReader.listRemoteFiles(source, source.getLogPath()));
+                sshLogReader.listRemoteFiles(source, source.getLogPath(), from));
 
         if (source.getLogFormat() == LogFormat.IGNITE || source.getLogFormat() == LogFormat.AUTO) {
             String archivePath = source.getLogPath() + "/archive";
             log.debug("[{}] listing Ignite archive at {}", source.getName(), archivePath);
-            remoteFiles.addAll(sshLogReader.listRemoteFiles(source, archivePath));
+            remoteFiles.addAll(sshLogReader.listRemoteFiles(source, archivePath, from));
         }
 
         log.debug("[{}] found {} remote file(s)", source.getName(), remoteFiles.size());

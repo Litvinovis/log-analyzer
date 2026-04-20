@@ -9,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
@@ -33,7 +34,7 @@ public class SshLogReader {
      * Lists remote log files (*.log, *.gz) in the given remote directory.
      * Returns full remote paths. Returns empty list on any error.
      */
-    public List<String> listRemoteFiles(LogAnalyzerConfig.Source source, String remotePath) {
+    public List<String> listRemoteFiles(LogAnalyzerConfig.Source source, String remotePath, Instant from) {
         log.debug("SSH listRemoteFiles: {}@{}:{}{}", source.getSshUser(), source.getSshHost(), source.getSshPort(), remotePath);
         Session session = null;
         ChannelSftp sftp = null;
@@ -46,11 +47,17 @@ public class SshLogReader {
             Vector<ChannelSftp.LsEntry> entries = sftp.ls(remotePath);
             for (ChannelSftp.LsEntry entry : entries) {
                 String name = entry.getFilename();
-                if (!entry.getAttrs().isDir() && isLogFile(name)) {
-                    files.add(remotePath + "/" + name);
+                if (entry.getAttrs().isDir() || !isLogFile(name)) continue;
+                if (from != null) {
+                    Instant mtime = Instant.ofEpochSecond(entry.getAttrs().getMTime());
+                    if (mtime.isBefore(from)) {
+                        log.debug("SSH skip old file (mtime {}): {}/{}", mtime, remotePath, name);
+                        continue;
+                    }
                 }
+                files.add(remotePath + "/" + name);
             }
-            log.debug("SSH listRemoteFiles: found {} log file(s) in {}", files.size(), remotePath);
+            log.debug("SSH listRemoteFiles: found {} relevant log file(s) in {}", files.size(), remotePath);
             return files;
         } catch (Exception e) {
             log.warn("SSH listRemoteFiles failed at {}:{}{} — {}", source.getSshHost(), source.getSshPort(), remotePath, e.getMessage());
@@ -58,6 +65,11 @@ public class SshLogReader {
         } finally {
             disconnect(sftp, session);
         }
+    }
+
+    // Backward-compat overload without time filter
+    public List<String> listRemoteFiles(LogAnalyzerConfig.Source source, String remotePath) {
+        return listRemoteFiles(source, remotePath, null);
     }
 
     /**

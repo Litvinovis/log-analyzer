@@ -11,6 +11,7 @@ public class LogAnalyzerConfig {
     private String sshKeyPath;
     private int cacheTtlSeconds = 300;
     private int maxCacheFileSizeMb = 50;
+    private int maxCachedFiles = 20;
     private List<Source> sources = new ArrayList<>();
 
     public String getSshKeyPath() { return sshKeyPath; }
@@ -21,6 +22,9 @@ public class LogAnalyzerConfig {
 
     public int getMaxCacheFileSizeMb() { return maxCacheFileSizeMb; }
     public void setMaxCacheFileSizeMb(int v) { this.maxCacheFileSizeMb = v; }
+
+    public int getMaxCachedFiles() { return maxCachedFiles; }
+    public void setMaxCachedFiles(int v) { this.maxCachedFiles = v; }
 
     public List<Source> getSources() { return sources; }
     public void setSources(List<Source> sources) { this.sources = sources; }
