@@ -146,6 +146,27 @@ public class LogAnalyzerService {
         }
     }
 
+    public List<LogEntry> getAllEntries(
+            List<String> apps, Instant from, Instant to, List<String> levels, String contains) {
+
+        Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
+        List<String> effectiveLevels = (levels != null && !levels.isEmpty()) ? levels : null;
+
+        return config.getSources().stream()
+                .filter(s -> appSet == null || appSet.contains(s.getName()))
+                .flatMap(s -> {
+                    List<LogEntry> all = loadEntries(s);
+                    return all.stream()
+                            .filter(e -> effectiveLevels == null
+                                    || effectiveLevels.stream().anyMatch(l -> l.equalsIgnoreCase(e.level())))
+                            .filter(e -> from == null || !e.timestamp().isBefore(from))
+                            .filter(e -> to == null || !e.timestamp().isAfter(to))
+                            .filter(e -> contains == null || mentionsId(e, contains));
+                })
+                .sorted(java.util.Comparator.comparing(LogEntry::timestamp))
+                .toList();
+    }
+
     public Optional<JobResponse> getJob(String jobId) {
         return Optional.ofNullable(jobs.get(jobId))
                 .map(j -> new JobResponse(jobId, j.status(), j.results()));

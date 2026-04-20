@@ -21,9 +21,10 @@ async function post(path, body) {
 }
 
 export const logsApi = {
-  getErrors: (params) => get('/errors', params),
-  getStats:  (params) => get('/stats',  params),
-  trace:     (traceId, app) => get(`/trace/${traceId}`, app ? { app } : {}),
+  getErrors:   (params) => get('/errors', params),
+  getStats:    (params) => get('/stats',  params),
+  trace:       (traceId, app) => get(`/trace/${traceId}`, app ? { app } : {}),
   startAnalysis: (body) => post('/analyze', body),
-  getJob:    (id) => get(`/jobs/${id}`),
+  getJob:      (id) => get(`/jobs/${id}`),
+  getAllEntries:(params) => get('/all', params),
 }

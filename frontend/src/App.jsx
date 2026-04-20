@@ -6,19 +6,22 @@ import {
   BarChartOutlined,
   SearchOutlined,
   ThunderboltOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons'
 import ErrorsPage from './pages/ErrorsPage'
 import StatsPage from './pages/StatsPage'
 import TracePage from './pages/TracePage'
 import AnalyzePage from './pages/AnalyzePage'
+import StreamPage from './pages/StreamPage'
 
 const { Sider, Content, Header } = Layout
 
 const NAV_ITEMS = [
-  { key: '/errors',  icon: <AlertOutlined />,       label: 'Ошибки' },
-  { key: '/stats',   icon: <BarChartOutlined />,     label: 'Статистика' },
-  { key: '/trace',   icon: <SearchOutlined />,       label: 'Трассировка' },
-  { key: '/analyze', icon: <ThunderboltOutlined />,  label: 'Анализ' },
+  { key: '/stream',  icon: <UnorderedListOutlined />, label: 'Все логи' },
+  { key: '/errors',  icon: <AlertOutlined />,         label: 'Ошибки' },
+  { key: '/stats',   icon: <BarChartOutlined />,       label: 'Статистика' },
+  { key: '/trace',   icon: <SearchOutlined />,         label: 'Трассировка' },
+  { key: '/analyze', icon: <ThunderboltOutlined />,    label: 'Анализ' },
 ]
 
 export default function App() {
@@ -44,7 +47,8 @@ export default function App() {
       <Layout>
         <Content style={{ padding: 24, background: '#f5f5f5', minHeight: '100vh' }}>
           <Routes>
-            <Route path="/" element={<Navigate to="/errors" replace />} />
+            <Route path="/" element={<Navigate to="/stream" replace />} />
+            <Route path="/stream"  element={<StreamPage />} />
             <Route path="/errors"  element={<ErrorsPage />} />
             <Route path="/stats"   element={<StatsPage />} />
             <Route path="/trace"   element={<TracePage />} />
