@@ -83,6 +83,55 @@ public class LogFileParser {
         return result;
     }
 
+    /**
+     * Variant with inline time filtering: entries outside [from, to] are discarded during parse,
+     * so they never accumulate in memory. Intended for large files that bypass the cache.
+     * Since log files are chronologically ordered, parsing stops early when timestamp > to.
+     */
+    public List<LogEntry> parseLines(Iterable<String> lines, String appName, String sourceFile,
+                                     LogFormat format, Instant from, Instant to) {
+        List<LogEntry> result = new ArrayList<>();
+        LogEntry current = null;
+        StringBuilder continuation = new StringBuilder();
+
+        for (String line : lines) {
+            if (line == null) continue;
+            if (line.isBlank()) {
+                if (current != null) {
+                    addIfInRange(result, withStackTrace(current, continuation.toString()), from, to);
+                    current = null;
+                    continuation.setLength(0);
+                }
+                continue;
+            }
+
+            if (ENTRY_START.matcher(line).find()) {
+                if (current != null) {
+                    addIfInRange(result, withStackTrace(current, continuation.toString()), from, to);
+                    continuation.setLength(0);
+                }
+                LogEntry next = parseLine(line, appName, sourceFile, format);
+                // Early exit: file is sorted chronologically, so nothing after this will be in range
+                if (next != null && to != null && next.timestamp().isAfter(to)) break;
+                current = next;
+            } else if (current != null) {
+                if (!continuation.isEmpty()) continuation.append('\n');
+                continuation.append(line);
+            }
+        }
+        if (current != null) {
+            addIfInRange(result, withStackTrace(current, continuation.toString()), from, to);
+        }
+        return result;
+    }
+
+    private void addIfInRange(List<LogEntry> result, LogEntry e, Instant from, Instant to) {
+        if (e == null) return;
+        if (from != null && e.timestamp().isBefore(from)) return;
+        if (to != null && e.timestamp().isAfter(to)) return;
+        result.add(e);
+    }
+
     // Backward-compat overload for List<String>
     public List<LogEntry> parseLines(List<String> lines, String appName, String sourceFile, LogFormat format) {
         return parseLines((Iterable<String>) lines, appName, sourceFile, format);
@@ -134,10 +183,18 @@ public class LogFileParser {
      * Reads the file line-by-line using a stream (avoids loading all lines into memory first).
      */
     public List<LogEntry> parseWithFormat(Path filePath, String appName, LogFormat format) throws IOException {
+        return parseWithFormat(filePath, appName, format, null, null);
+    }
+
+    public List<LogEntry> parseWithFormat(Path filePath, String appName, LogFormat format,
+                                          Instant from, Instant to) throws IOException {
         if (filePath.getFileName().toString().endsWith(".gz")) {
-            return parseGzFile(filePath, appName, format);
+            return parseGzFile(filePath, appName, format, from, to);
         }
         try (Stream<String> lines = Files.lines(filePath, StandardCharsets.UTF_8)) {
+            if (from != null || to != null) {
+                return parseLines(lines::iterator, appName, filePath.toString(), format, from, to);
+            }
             return parseLines(lines::iterator, appName, filePath.toString(), format);
         }
     }
@@ -147,9 +204,17 @@ public class LogFileParser {
     }
 
     public List<LogEntry> parseGzFile(Path filePath, String appName, LogFormat format) throws IOException {
+        return parseGzFile(filePath, appName, format, null, null);
+    }
+
+    public List<LogEntry> parseGzFile(Path filePath, String appName, LogFormat format,
+                                      Instant from, Instant to) throws IOException {
         try (var is = Files.newInputStream(filePath);
              var gz = new GZIPInputStream(is);
              var reader = new BufferedReader(new InputStreamReader(gz, StandardCharsets.UTF_8))) {
+            if (from != null || to != null) {
+                return parseLines(reader.lines()::iterator, appName, filePath.toString(), format, from, to);
+            }
             return parseLines(reader.lines()::iterator, appName, filePath.toString(), format);
         }
     }

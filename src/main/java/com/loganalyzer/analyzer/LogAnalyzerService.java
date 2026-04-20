@@ -113,7 +113,7 @@ public class LogAnalyzerService {
 
         List<CompletableFuture<Optional<LogAnalysisResult>>> futures = sources.stream()
                 .map(source -> CompletableFuture.supplyAsync(() -> {
-                    List<LogEntry> all = loadEntries(source, from);
+                    List<LogEntry> all = loadEntries(source, from, to);
                     List<String> effectiveLevels = (levels != null && !levels.isEmpty())
                             ? levels : source.getWatchLevels();
                     log.debug("[{}] loaded {} entries, filtering with levels={}", source.getName(), all.size(), effectiveLevels);
@@ -145,7 +145,7 @@ public class LogAnalyzerService {
                 traceId, apps, from, to, sources.size());
 
         for (LogAnalyzerConfig.Source source : sources) {
-            List<LogEntry> all = loadEntries(source, null);
+            List<LogEntry> all = loadEntries(source, from, to);
             log.debug("[{}] loaded {} entries, searching for '{}'", source.getName(), all.size(), traceId);
             List<LogEntry> matching = all.stream()
                     .filter(e -> from == null || !e.timestamp().isBefore(from))
@@ -174,7 +174,7 @@ public class LogAnalyzerService {
 
         List<CompletableFuture<List<LogEntry>>> futures = sources.stream()
                 .map(source -> CompletableFuture.supplyAsync(() -> {
-                    List<LogEntry> all = loadEntries(source, from);
+                    List<LogEntry> all = loadEntries(source, from, to);
                     List<LogEntry> filtered = all.stream()
                             .filter(e -> effectiveLevels == null
                                     || effectiveLevels.stream().anyMatch(l -> l.equalsIgnoreCase(e.level())))
@@ -246,13 +246,17 @@ public class LogAnalyzerService {
     }
 
     private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source, Instant from) {
+        return loadEntries(source, from, null);
+    }
+
+    private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source, Instant from, Instant to) {
         if (source.getConnection() == ConnectionType.SSH) {
             return loadRemoteEntries(source, from);
         }
-        return loadLocalEntries(source, from);
+        return loadLocalEntries(source, from, to);
     }
 
-    private List<LogEntry> loadLocalEntries(LogAnalyzerConfig.Source source, Instant from) {
+    private List<LogEntry> loadLocalEntries(LogAnalyzerConfig.Source source, Instant from, Instant to) {
         List<LogEntry> all = new ArrayList<>();
         Path basePath = Paths.get(source.getLogPath());
 
@@ -274,7 +278,7 @@ public class LogAnalyzerService {
                 continue;
             }
             log.debug("[{}] parsing: {}", source.getName(), logFile);
-            List<LogEntry> entries = cachedOrParse(logFile, source.getName(), source.getLogFormat());
+            List<LogEntry> entries = cachedOrParse(logFile, source.getName(), source.getLogFormat(), from, to);
             log.debug("[{}] parsed {} entries from {}", source.getName(), entries.size(), logFile.getFileName());
             all.addAll(entries);
         }
@@ -289,27 +293,31 @@ public class LogAnalyzerService {
         }
     }
 
-    private List<LogEntry> cachedOrParse(Path logFile, String appName, LogFormat format) {
+    private List<LogEntry> cachedOrParse(Path logFile, String appName, LogFormat format,
+                                         Instant from, Instant to) {
         try {
             long fileSize = Files.size(logFile);
             long maxBytes = (long) config.getMaxCacheFileSizeMb() * 1024 * 1024;
             if (fileSize <= maxBytes) {
-                return store.getOrLoad(logFile, () -> parseLocalFile(logFile, appName, format));
+                // Small file: cache ALL entries, then filter after (cache is reusable across queries)
+                return store.getOrLoad(logFile, () -> parseLocalFile(logFile, appName, format, null, null));
             }
-            log.debug("File {} ({} MB) exceeds cache limit, parsing without cache",
-                    logFile.getFileName(), fileSize / 1024 / 1024);
-            return parseLocalFile(logFile, appName, format);
+            // Large file: parse with inline time filter to avoid holding full content in heap
+            log.debug("File {} ({} MB) exceeds cache limit — parsing with inline filter from={} to={}",
+                    logFile.getFileName(), fileSize / 1024 / 1024, from, to);
+            return parseLocalFile(logFile, appName, format, from, to);
         } catch (IOException | UncheckedIOException e) {
             log.error("Failed to read file {}: {}", logFile, e.getMessage());
             return List.of();
         }
     }
 
-    private List<LogEntry> parseLocalFile(Path file, String appName, LogFormat format) {
+    private List<LogEntry> parseLocalFile(Path file, String appName, LogFormat format,
+                                          Instant from, Instant to) {
         try {
             return file.getFileName().toString().endsWith(".gz")
-                    ? parser.parseGzFile(file, appName, format)
-                    : parser.parseWithFormat(file, appName, format);
+                    ? parser.parseGzFile(file, appName, format, from, to)
+                    : parser.parseWithFormat(file, appName, format, from, to);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
