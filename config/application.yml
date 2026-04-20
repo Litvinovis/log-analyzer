@@ -11,6 +11,9 @@ log-analyzer:
   max-cached-files: 20              # максимум файлов одновременно в кэше (старые вытесняются)
   log-timezone: Europe/Moscow       # таймзона в которой записаны метки времени в лог-файлах
   cors-allowed-origin: http://localhost:5173  # разрешённый origin для CORS (UI dev-сервер)
+  max-concurrent-analyses: 2                 # максимум одновременных анализов
+  max-analysis-results: 10000                # лимит записей на один анализ (защита от OOM)
+  min-free-heap-mb: 200                      # минимум свободной памяти для запуска анализа (MB)
 
   sources:
 

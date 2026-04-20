@@ -73,7 +73,8 @@ export default function StatsPage() {
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Card title="Параметры">
-        <Form form={form} layout="inline" onFinish={search}>
+        <Form form={form} layout="inline" onFinish={search}
+              initialValues={{ range: [dayjs().subtract(24, 'hour'), dayjs()] }}>
           <Form.Item name="app" label="Приложение">
             <Select mode="multiple" placeholder="Все приложения" allowClear style={{ width: 220 }} options={appOptions} />
           </Form.Item>

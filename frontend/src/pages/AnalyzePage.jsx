@@ -115,7 +115,8 @@ export default function AnalyzePage() {
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Card title="Параметры анализа">
-        <Form form={form} layout="vertical" onFinish={submit}>
+        <Form form={form} layout="vertical" onFinish={submit}
+              initialValues={{ range: [dayjs().subtract(24, 'hour'), dayjs()] }}>
           <Row gutter={16}>
             <Col span={6}>
               <Form.Item name="apps" label="Приложения">
@@ -181,13 +182,16 @@ export default function AnalyzePage() {
             size="small"
             current={statusStep}
             status={job.status === 'FAILED' ? 'error' : undefined}
-            style={{ marginBottom: 24 }}
+            style={{ marginBottom: job.errorMessage ? 12 : 24 }}
             items={[
               { title: 'Принято' },
               { title: 'Выполняется' },
               { title: job.status === 'FAILED' ? 'Ошибка' : 'Готово' },
             ]}
           />
+          {job.errorMessage && (
+            <Alert type="error" message={job.errorMessage} showIcon style={{ marginBottom: 16 }} />
+          )}
 
           {job.status === 'COMPLETED' && job.results !== null && (
             job.results?.length === 0

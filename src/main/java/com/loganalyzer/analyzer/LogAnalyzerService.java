@@ -30,6 +30,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -50,8 +51,9 @@ public class LogAnalyzerService {
     private final SshLogReader sshLogReader;
     private final Executor executor;
 
-    private record JobEntry(String status, List<LogAnalysisResult> results) {}
+    private record JobEntry(String status, List<LogAnalysisResult> results, String errorMessage) {}
     private final ConcurrentHashMap<String, JobEntry> jobs = new ConcurrentHashMap<>();
+    private final Semaphore analysisSlots;
 
     @org.springframework.beans.factory.annotation.Autowired
     public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store,
@@ -62,6 +64,7 @@ public class LogAnalyzerService {
         this.store = store;
         this.sshLogReader = sshLogReader;
         this.executor = executor;
+        this.analysisSlots = new Semaphore(config.getMaxConcurrentAnalyses());
     }
 
     // Used in tests without SSH/executor
@@ -72,10 +75,13 @@ public class LogAnalyzerService {
     @PostConstruct
     public void logConfig() {
         log.info("=== Log Analyzer configuration ===");
-        log.info("SSH key path : {}", config.getSshKeyPath());
-        log.info("Log timezone : {}", config.getLogTimezone());
-        log.info("Cache TTL    : {} s", config.getCacheTtlSeconds());
-        log.info("Max cache    : {} MB", config.getMaxCacheFileSizeMb());
+        log.info("SSH key path        : {}", config.getSshKeyPath());
+        log.info("Log timezone        : {}", config.getLogTimezone());
+        log.info("Cache TTL           : {} s", config.getCacheTtlSeconds());
+        log.info("Max cache file      : {} MB", config.getMaxCacheFileSizeMb());
+        log.info("Max concurrent anal.: {}", config.getMaxConcurrentAnalyses());
+        log.info("Max analysis results: {}", config.getMaxAnalysisResults());
+        log.info("Min free heap       : {} MB", config.getMinFreeHeapMb());
         log.info("Sources ({}):", config.getSources().size());
         for (LogAnalyzerConfig.Source s : config.getSources()) {
             log.info("  [{}] connection={} format={} path={} watchLevels={}",
@@ -229,21 +235,49 @@ public class LogAnalyzerService {
     @Async("logAnalyzerExecutor")
     public void analyzeAsync(String jobId, List<String> apps, Instant from, Instant to,
                              List<String> levels, String contains) {
-        jobs.put(jobId, new JobEntry("RUNNING", null));
-        log.debug("analyzeAsync: jobId={} started", jobId);
+        if (!analysisSlots.tryAcquire()) {
+            String msg = "Сервер занят: достигнут лимит одновременных анализов ("
+                    + config.getMaxConcurrentAnalyses() + "), повторите позже";
+            log.warn("analyzeAsync: jobId={} rejected — {}", jobId, msg);
+            jobs.put(jobId, new JobEntry("FAILED", null, msg));
+            return;
+        }
+        if (!isHeapSufficient()) {
+            analysisSlots.release();
+            String msg = "Недостаточно памяти: свободно " + freeHeapMb() + " MB, требуется минимум "
+                    + config.getMinFreeHeapMb() + " MB";
+            log.warn("analyzeAsync: jobId={} rejected — {}", jobId, msg);
+            jobs.put(jobId, new JobEntry("FAILED", null, msg));
+            return;
+        }
+        jobs.put(jobId, new JobEntry("RUNNING", null, null));
+        log.debug("analyzeAsync: jobId={} started (slots remaining: {})", jobId, analysisSlots.availablePermits());
         try {
             List<LogAnalysisResult> results = analyzeErrors(apps, from, to, levels, contains);
-            jobs.put(jobId, new JobEntry("COMPLETED", results));
+            jobs.put(jobId, new JobEntry("COMPLETED", results, null));
             log.debug("analyzeAsync: jobId={} completed, {} results", jobId, results.size());
         } catch (Exception e) {
             log.error("analyzeAsync: jobId={} failed", jobId, e);
-            jobs.put(jobId, new JobEntry("FAILED", null));
+            jobs.put(jobId, new JobEntry("FAILED", null, e.getMessage()));
+        } finally {
+            analysisSlots.release();
         }
+    }
+
+    private boolean isHeapSufficient() {
+        Runtime rt = Runtime.getRuntime();
+        long freeBytes = rt.maxMemory() - rt.totalMemory() + rt.freeMemory();
+        return freeBytes >= (long) config.getMinFreeHeapMb() * 1024 * 1024;
+    }
+
+    private long freeHeapMb() {
+        Runtime rt = Runtime.getRuntime();
+        return (rt.maxMemory() - rt.totalMemory() + rt.freeMemory()) / 1024 / 1024;
     }
 
     public Optional<JobResponse> getJob(String jobId) {
         return Optional.ofNullable(jobs.get(jobId))
-                .map(j -> new JobResponse(jobId, j.status(), j.results()));
+                .map(j -> new JobResponse(jobId, j.status(), j.results(), j.errorMessage()));
     }
 
     private List<LogEntry> loadEntries(LogAnalyzerConfig.Source source, Instant from, Instant to) {
@@ -368,6 +402,7 @@ public class LogAnalyzerService {
                 .filter(e -> from == null || !e.timestamp().isBefore(from))
                 .filter(e -> to == null || !e.timestamp().isAfter(to))
                 .filter(e -> contains == null || mentionsId(e, contains))
+                .limit(config.getMaxAnalysisResults())
                 .toList();
         return new ParseResult(filtered, all.size());
     }

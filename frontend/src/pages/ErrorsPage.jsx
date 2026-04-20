@@ -127,7 +127,8 @@ export default function ErrorsPage() {
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Card title="Фильтры">
-        <Form form={form} layout="vertical" onFinish={handleSearch}>
+        <Form form={form} layout="vertical" onFinish={handleSearch}
+              initialValues={{ range: [dayjs().subtract(24, 'hour'), dayjs()] }}>
           <Row gutter={16}>
             <Col span={6}>
               <Form.Item name="app" label="Приложение">

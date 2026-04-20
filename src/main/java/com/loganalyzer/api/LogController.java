@@ -70,7 +70,7 @@ public class LogController {
                 query.levels(),
                 query.contains()
         );
-        return ResponseEntity.accepted().body(new JobResponse(jobId, "PENDING", null));
+        return ResponseEntity.accepted().body(new JobResponse(jobId, "PENDING", null, null));
     }
 
     @GetMapping("/jobs/{id}")
