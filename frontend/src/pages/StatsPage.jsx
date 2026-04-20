@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
-  Card, Form, Input, Button, Row, Col, Statistic,
-  Table, Space, Alert, DatePicker, Spin, Typography,
+  Card, Form, Select, Button, Row, Col, Statistic,
+  Table, Space, Alert, DatePicker, Spin,
 } from 'antd'
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
@@ -10,6 +10,7 @@ import {
 import { SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
+import { useApps } from '../hooks/useApps'
 
 const { RangePicker } = DatePicker
 
@@ -24,6 +25,7 @@ const LEVEL_COLORS = {
 const PIE_COLORS = Object.values(LEVEL_COLORS)
 
 export default function StatsPage() {
+  const appOptions = useApps()
   const [form] = Form.useForm()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -36,7 +38,7 @@ export default function StatsPage() {
     setError(null)
     try {
       const result = await logsApi.getStats({
-        app: values.app || undefined,
+        app: values.app?.join(',') || undefined,
         from: from ? from.toISOString() : undefined,
         to:   to   ? to.toISOString()   : undefined,
       })
@@ -73,7 +75,7 @@ export default function StatsPage() {
       <Card title="Параметры">
         <Form form={form} layout="inline" onFinish={search}>
           <Form.Item name="app" label="Приложение">
-            <Input placeholder="все" allowClear style={{ width: 200 }} />
+            <Select mode="multiple" placeholder="Все приложения" allowClear style={{ width: 220 }} options={appOptions} />
           </Form.Item>
           <Form.Item name="range" label="Период">
             <RangePicker showTime />
