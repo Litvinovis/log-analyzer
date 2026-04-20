@@ -14,6 +14,9 @@ public class LogAnalyzerConfig {
     private int maxCachedFiles = 20;
     private String logTimezone = "UTC";
     private String corsAllowedOrigin = "http://localhost:5173";
+    private int maxConcurrentAnalyses = 2;
+    private int maxAnalysisResults = 10_000;
+    private int minFreeHeapMb = 200;
     private List<Source> sources = new ArrayList<>();
 
     public String getSshKeyPath() { return sshKeyPath; }
@@ -33,6 +36,15 @@ public class LogAnalyzerConfig {
 
     public String getCorsAllowedOrigin() { return corsAllowedOrigin; }
     public void setCorsAllowedOrigin(String v) { this.corsAllowedOrigin = v; }
+
+    public int getMaxConcurrentAnalyses() { return maxConcurrentAnalyses; }
+    public void setMaxConcurrentAnalyses(int v) { this.maxConcurrentAnalyses = v; }
+
+    public int getMaxAnalysisResults() { return maxAnalysisResults; }
+    public void setMaxAnalysisResults(int v) { this.maxAnalysisResults = v; }
+
+    public int getMinFreeHeapMb() { return minFreeHeapMb; }
+    public void setMinFreeHeapMb(int v) { this.minFreeHeapMb = v; }
 
     public List<Source> getSources() { return sources; }
     public void setSources(List<Source> sources) { this.sources = sources; }

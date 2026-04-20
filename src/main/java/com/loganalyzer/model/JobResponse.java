@@ -5,6 +5,7 @@ import java.util.List;
 public record JobResponse(
         String jobId,
         String status,
-        List<LogAnalysisResult> results
+        List<LogAnalysisResult> results,
+        String errorMessage
 ) {
 }
