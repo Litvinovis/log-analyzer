@@ -3,6 +3,7 @@ import {
   Card, Form, Input, Select, Button, Alert, Space,
   Table, Typography, Tag, Steps, DatePicker, Row, Col,
 } from 'antd'
+import { useApps } from '../hooks/useApps'
 import { ThunderboltOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
@@ -41,6 +42,7 @@ const resultColumns = [
 ]
 
 export default function AnalyzePage() {
+  const appOptions = useApps()
   const [form] = Form.useForm()
   const [job, setJob] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -101,7 +103,7 @@ export default function AnalyzePage() {
           <Row gutter={16}>
             <Col span={6}>
               <Form.Item name="apps" label="Приложения">
-                <Select mode="tags" placeholder="Все приложения" allowClear />
+                <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} />
               </Form.Item>
             </Col>
             <Col span={6}>

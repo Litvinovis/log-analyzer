@@ -34,6 +34,7 @@ public class SshLogReader {
      * Returns full remote paths. Returns empty list on any error.
      */
     public List<String> listRemoteFiles(LogAnalyzerConfig.Source source, String remotePath) {
+        log.debug("SSH listRemoteFiles: {}@{}:{}{}", source.getSshUser(), source.getSshHost(), source.getSshPort(), remotePath);
         Session session = null;
         ChannelSftp sftp = null;
         try {
@@ -49,9 +50,10 @@ public class SshLogReader {
                     files.add(remotePath + "/" + name);
                 }
             }
+            log.debug("SSH listRemoteFiles: found {} log file(s) in {}", files.size(), remotePath);
             return files;
         } catch (Exception e) {
-            log.debug("Cannot list remote files at {}:{} — {}", source.getSshHost(), remotePath, e.getMessage());
+            log.warn("SSH listRemoteFiles failed at {}:{}{} — {}", source.getSshHost(), source.getSshPort(), remotePath, e.getMessage());
             return List.of();
         } finally {
             disconnect(sftp, session);
@@ -63,6 +65,7 @@ public class SshLogReader {
      * Supports .gz files. Returns empty list on any error.
      */
     public List<String> readRemoteLines(LogAnalyzerConfig.Source source, String remotePath) {
+        log.debug("SSH readRemoteLines: {}@{}:{}{}", source.getSshUser(), source.getSshHost(), source.getSshPort(), remotePath);
         Session session = null;
         ChannelSftp sftp = null;
         try {
@@ -72,10 +75,12 @@ public class SshLogReader {
             InputStream raw = sftp.get(remotePath);
             InputStream is = remotePath.endsWith(".gz") ? new GZIPInputStream(raw) : raw;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                return reader.lines().toList();
+                List<String> lines = reader.lines().toList();
+                log.debug("SSH readRemoteLines: read {} lines from {}", lines.size(), remotePath);
+                return lines;
             }
         } catch (Exception e) {
-            log.debug("Cannot read remote file {}:{} — {}", source.getSshHost(), remotePath, e.getMessage());
+            log.warn("SSH readRemoteLines failed at {}:{}{} — {}", source.getSshHost(), source.getSshPort(), remotePath, e.getMessage());
             return List.of();
         } finally {
             disconnect(sftp, session);
@@ -87,11 +92,16 @@ public class SshLogReader {
         String keyPath = config.getSshKeyPath();
         if (keyPath != null && !keyPath.isBlank()) {
             String expanded = keyPath.replace("~", System.getProperty("user.home"));
+            log.debug("SSH using identity: {}", expanded);
             jsch.addIdentity(expanded);
+        } else {
+            log.warn("SSH key path is not configured (log-analyzer.ssh-key-path)");
         }
+        log.debug("SSH connecting to {}@{}:{}", source.getSshUser(), source.getSshHost(), source.getSshPort());
         Session session = jsch.getSession(source.getSshUser(), source.getSshHost(), source.getSshPort());
         session.setConfig("StrictHostKeyChecking", "no");
         session.connect(10_000);
+        log.debug("SSH connected to {}:{}", source.getSshHost(), source.getSshPort());
         return session;
     }
 

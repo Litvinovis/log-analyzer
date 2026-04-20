@@ -1,12 +1,13 @@
 import React, { useState } from 'react'
 import {
   Card, Form, Input, Button, Alert, Space, Table,
-  Typography, Tag, Collapse, Empty, Badge,
+  Typography, Tag, Collapse, Empty, Badge, Select,
 } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
+import { useApps } from '../hooks/useApps'
 
 const { Text, Paragraph } = Typography
 
@@ -54,6 +55,7 @@ const expandable = {
 }
 
 export default function TracePage() {
+  const appOptions = useApps()
   const [form] = Form.useForm()
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -67,7 +69,7 @@ export default function TracePage() {
     setError(null)
     setSearchedId(traceId.trim())
     try {
-      const data = await logsApi.trace(traceId.trim(), app?.trim() || undefined)
+      const data = await logsApi.trace(traceId.trim(), app?.join(',') || undefined)
       setResults(data)
     } catch (e) {
       setError(e.message)
@@ -116,8 +118,8 @@ export default function TracePage() {
               allowClear
             />
           </Form.Item>
-          <Form.Item name="app" label="Приложения (необязательно)">
-            <Input placeholder="svc1,svc2 или оставьте пустым" style={{ width: 220 }} allowClear />
+          <Form.Item name="app" label="Приложения (необязательно)" style={{ minWidth: 260 }}>
+            <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} style={{ width: 260 }} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>

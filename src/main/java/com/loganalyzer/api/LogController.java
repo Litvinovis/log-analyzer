@@ -127,6 +127,11 @@ public class LogController {
         return ResponseEntity.ok(new PagedResult<>(paged, page, size, total, totalPages));
     }
 
+    @GetMapping("/apps")
+    public ResponseEntity<List<String>> getApps() {
+        return ResponseEntity.ok(analyzerService.getConfiguredApps());
+    }
+
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");

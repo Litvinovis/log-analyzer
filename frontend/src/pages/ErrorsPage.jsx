@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react'
 import {
-  Card, Form, Input, Select, Button, Table, Space,
+  Card, Form, Select, Button, Table, Space,
   DatePicker, Typography, Row, Col, Alert,
 } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
+import { useApps } from '../hooks/useApps'
 
 const { RangePicker } = DatePicker
 const { Text, Paragraph } = Typography
@@ -16,6 +17,7 @@ const LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']
 const PAGE_SIZE = 20
 
 export default function ErrorsPage() {
+  const appOptions = useApps()
   const [form] = Form.useForm()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -27,7 +29,7 @@ export default function ErrorsPage() {
     const values = form.getFieldsValue()
     const [from, to] = values.range || []
     const params = {
-      app: values.app || undefined,
+      app: values.app?.join(',') || undefined,
       from: from ? from.toISOString() : undefined,
       to:   to   ? to.toISOString()   : undefined,
       levels: values.levels?.join(',') || undefined,
@@ -129,7 +131,7 @@ export default function ErrorsPage() {
           <Row gutter={16}>
             <Col span={6}>
               <Form.Item name="app" label="Приложение">
-                <Input placeholder="order-service, ignite-node-1" allowClear />
+                <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} />
               </Form.Item>
             </Col>
             <Col span={6}>
