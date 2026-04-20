@@ -1,0 +1,105 @@
+<configuration scan="true">
+    <jmxConfigurator />
+
+    <!-- ===== APPENDERS ===== -->
+
+    <!-- Технический лог приложения -->
+    <appender name="TECH-LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/la.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archive/la.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>100</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Лог SSH-подключений к удалённым серверам -->
+    <appender name="SSH-LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/la-ssh.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archive/la-ssh.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>100</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Лог файлового вотчера (события изменения лог-файлов) -->
+    <appender name="WATCHER-LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/la-watcher.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archive/la-watcher.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>100</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Лог API-запросов -->
+    <appender name="API-LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/la-api.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archive/la-api.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>100</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ===== ЛОГГЕРЫ ===== -->
+
+    <logger name="com.loganalyzer.ssh" level="DEBUG" additivity="false">
+        <appender-ref ref="SSH-LOG"/>
+    </logger>
+
+    <logger name="com.loganalyzer.watcher" level="DEBUG" additivity="false">
+        <appender-ref ref="WATCHER-LOG"/>
+    </logger>
+
+    <logger name="com.loganalyzer.api" level="INFO" additivity="false">
+        <appender-ref ref="API-LOG"/>
+        <appender-ref ref="TECH-LOG"/>
+    </logger>
+
+    <logger name="com.loganalyzer" level="INFO" additivity="false">
+        <appender-ref ref="TECH-LOG"/>
+    </logger>
+
+    <!-- Подавить шум от Spring/Tomcat в основной лог -->
+    <logger name="org.springframework" level="WARN" additivity="false">
+        <appender-ref ref="TECH-LOG"/>
+    </logger>
+
+    <logger name="org.apache.catalina" level="WARN" additivity="false">
+        <appender-ref ref="TECH-LOG"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="TECH-LOG"/>
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+</configuration>
