@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   Card, Form, Input, Select, Button, Alert, Space,
-  Table, Typography, Tag, Steps, DatePicker, Row, Col,
+  Table, Typography, Tag, Steps, DatePicker, Row, Col, Tooltip,
 } from 'antd'
 import { useApps } from '../hooks/useApps'
-import { ThunderboltOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
+import { ThunderboltOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
@@ -40,6 +40,22 @@ const resultColumns = [
     ),
   },
 ]
+
+function exportCsv(results, jobId) {
+  const ESC = (v) => v == null ? '' : '"' + String(v).replace(/"/g, '""') + '"'
+  const header = ['app', 'timestamp', 'level', 'threadName', 'loggerName', 'message', 'stackTrace']
+  const rows = results.flatMap(r =>
+    r.errors.map(e => [r.app, e.timestamp, e.level, e.threadName, e.loggerName, e.message, e.stackTrace])
+  )
+  const csv = [header, ...rows].map(row => row.map(ESC).join(',')).join('\r\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `analysis-${jobId}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 export default function AnalyzePage() {
   const appOptions = useApps()
@@ -147,6 +163,18 @@ export default function AnalyzePage() {
                 {job.status}
               </Tag>
             </Space>
+          }
+          extra={
+            job.status === 'COMPLETED' && job.results?.length > 0 && (
+              <Tooltip title="Скачать все записи в CSV">
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => exportCsv(job.results, job.jobId)}
+                >
+                  Скачать CSV
+                </Button>
+              </Tooltip>
+            )
           }
         >
           <Steps
