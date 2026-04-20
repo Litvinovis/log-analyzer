@@ -9,6 +9,7 @@ log-analyzer:
   cache-ttl-seconds: 300            # TTL кэша файлов в секундах
   max-cache-file-size-mb: 50        # файлы крупнее этого не кэшируются
   max-cached-files: 20              # максимум файлов одновременно в кэше (старые вытесняются)
+  log-timezone: Europe/Moscow       # таймзона в которой записаны метки времени в лог-файлах
 
   sources:
 

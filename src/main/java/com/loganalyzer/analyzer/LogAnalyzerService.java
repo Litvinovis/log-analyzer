@@ -73,6 +73,7 @@ public class LogAnalyzerService {
     public void logConfig() {
         log.info("=== Log Analyzer configuration ===");
         log.info("SSH key path : {}", config.getSshKeyPath());
+        log.info("Log timezone : {}", config.getLogTimezone());
         log.info("Cache TTL    : {} s", config.getCacheTtlSeconds());
         log.info("Max cache    : {} MB", config.getMaxCacheFileSizeMb());
         log.info("Sources ({}):", config.getSources().size());

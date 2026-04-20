@@ -1,5 +1,6 @@
 package com.loganalyzer.parser;
 
+import com.loganalyzer.config.LogAnalyzerConfig;
 import com.loganalyzer.config.LogFormat;
 import com.loganalyzer.model.LogEntry;
 
@@ -11,7 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -43,7 +45,17 @@ public class LogFileParser {
 
     private static final DateTimeFormatter TIMESTAMP_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-    public LogFileParser() {}
+    private final ZoneId logZone;
+
+    @Autowired
+    public LogFileParser(LogAnalyzerConfig config) {
+        this.logZone = ZoneId.of(config.getLogTimezone());
+    }
+
+    // Used in tests without config
+    public LogFileParser() {
+        this.logZone = ZoneId.of("UTC");
+    }
 
     /**
      * Main multi-line parser. Accepts any Iterable<String> so callers can pass
@@ -235,7 +247,8 @@ public class LogFileParser {
         if (ts == null || ts.isBlank()) return null;
         try {
             return LocalDateTime.parse(ts, TIMESTAMP_FMT)
-                    .toInstant(ZoneOffset.UTC);
+                    .atZone(logZone)
+                    .toInstant();
         } catch (DateTimeParseException e) {
             return null;
         }
