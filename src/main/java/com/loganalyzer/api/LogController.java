@@ -6,6 +6,7 @@ import com.loganalyzer.model.LogAnalysisResult;
 import com.loganalyzer.model.LogQuery;
 import com.loganalyzer.model.LogStats;
 import com.loganalyzer.model.PagedResult;
+import com.loganalyzer.model.TraceResult;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -86,6 +87,21 @@ public class LogController {
         return analyzerService.getJob(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Trace a transaction UUID across all (or specified) applications.
+     * Returns all log entries (any level) that mention the given ID,
+     * grouped by application — useful for following a request end-to-end.
+     */
+    @GetMapping("/trace/{traceId}")
+    public ResponseEntity<List<TraceResult>> traceById(
+            @PathVariable String traceId,
+            @RequestParam(required = false) String app) {
+
+        List<String> apps = app != null ? List.of(app.split(",")) : List.of();
+        List<TraceResult> results = analyzerService.findByTraceId(traceId, apps);
+        return ResponseEntity.ok(results);
     }
 
     @GetMapping("/health")

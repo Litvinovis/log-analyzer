@@ -66,4 +66,11 @@ class LogControllerTest {
         mockMvc.perform(get("/api/logs/jobs/nonexistent-id"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void shouldReturnTraceResultsForUUID() throws Exception {
+        mockMvc.perform(get("/api/logs/trace/f47ac10b-58cc-4372-a567-0e02b2c3d479"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
 }
