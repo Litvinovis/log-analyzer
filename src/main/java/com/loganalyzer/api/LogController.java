@@ -128,7 +128,11 @@ public class LogController {
     }
 
     private static List<String> parseApps(String app) {
-        return app != null ? List.of(app.split(",")) : List.of();
+        if (app == null) return List.of();
+        return java.util.Arrays.stream(app.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     private static Instant parseInstant(String s) {
