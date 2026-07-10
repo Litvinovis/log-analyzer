@@ -36,7 +36,6 @@ import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -49,7 +48,10 @@ public class LogAnalyzerService {
     private final LogFileParser parser;
     private final LogStore store;
     private final SshLogReader sshLogReader;
-    private final Executor executor;
+    // Задачи по источникам выполняются на виртуальных потоках, а не на logAnalyzerExecutor:
+    // @Async-джобы занимают core-потоки того пула и join()-ят подзадачи из его же очереди —
+    // при двух параллельных анализах это давало вечный дедлок (очередь не пуста, потоки не растут)
+    private final Executor sourceExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
 
     private record JobEntry(String status, List<LogAnalysisResult> results, String errorMessage) {}
     private final ConcurrentHashMap<String, JobEntry> jobs = new ConcurrentHashMap<>();
@@ -57,19 +59,17 @@ public class LogAnalyzerService {
 
     @org.springframework.beans.factory.annotation.Autowired
     public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store,
-                              SshLogReader sshLogReader,
-                              @Qualifier("logAnalyzerExecutor") Executor executor) {
+                              SshLogReader sshLogReader) {
         this.config = config;
         this.parser = parser;
         this.store = store;
         this.sshLogReader = sshLogReader;
-        this.executor = executor;
         this.analysisSlots = new Semaphore(config.getMaxConcurrentAnalyses());
     }
 
-    // Used in tests without SSH/executor
+    // Used in tests without SSH
     public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store) {
-        this(config, parser, store, null, Runnable::run);
+        this(config, parser, store, null);
     }
 
     @PostConstruct
@@ -127,7 +127,7 @@ public class LogAnalyzerService {
                     return Optional.of(new LogAnalysisResult(
                             source.getName(), Instant.now(),
                             parsed.errors(), all.size(), parsed.errors().size()));
-                }, executor))
+                }, sourceExecutor))
                 .toList();
 
         return futures.stream()
@@ -188,7 +188,7 @@ public class LogAnalyzerService {
                             .toList();
                     log.debug("[{}] loaded {} entries, after filter: {}", source.getName(), all.size(), filtered.size());
                     return filtered;
-                }, executor))
+                }, sourceExecutor))
                 .toList();
 
         return futures.stream()
