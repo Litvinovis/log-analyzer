@@ -36,7 +36,6 @@ import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -49,7 +48,10 @@ public class LogAnalyzerService {
     private final LogFileParser parser;
     private final LogStore store;
     private final SshLogReader sshLogReader;
-    private final Executor executor;
+    // Задачи по источникам выполняются на виртуальных потоках, а не на logAnalyzerExecutor:
+    // @Async-джобы занимают core-потоки того пула и join()-ят подзадачи из его же очереди —
+    // при двух параллельных анализах это давало вечный дедлок (очередь не пуста, потоки не растут)
+    private final Executor sourceExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
 
     private record JobEntry(String status, List<LogAnalysisResult> results, String errorMessage) {}
     private final ConcurrentHashMap<String, JobEntry> jobs = new ConcurrentHashMap<>();
@@ -57,19 +59,17 @@ public class LogAnalyzerService {
 
     @org.springframework.beans.factory.annotation.Autowired
     public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store,
-                              SshLogReader sshLogReader,
-                              @Qualifier("logAnalyzerExecutor") Executor executor) {
+                              SshLogReader sshLogReader) {
         this.config = config;
         this.parser = parser;
         this.store = store;
         this.sshLogReader = sshLogReader;
-        this.executor = executor;
         this.analysisSlots = new Semaphore(config.getMaxConcurrentAnalyses());
     }
 
-    // Used in tests without SSH/executor
+    // Used in tests without SSH
     public LogAnalyzerService(LogAnalyzerConfig config, LogFileParser parser, LogStore store) {
-        this(config, parser, store, null, Runnable::run);
+        this(config, parser, store, null);
     }
 
     @PostConstruct
@@ -127,7 +127,7 @@ public class LogAnalyzerService {
                     return Optional.of(new LogAnalysisResult(
                             source.getName(), Instant.now(),
                             parsed.errors(), all.size(), parsed.errors().size()));
-                }, executor))
+                }, sourceExecutor))
                 .toList();
 
         return futures.stream()
@@ -188,7 +188,7 @@ public class LogAnalyzerService {
                             .toList();
                     log.debug("[{}] loaded {} entries, after filter: {}", source.getName(), all.size(), filtered.size());
                     return filtered;
-                }, executor))
+                }, sourceExecutor))
                 .toList();
 
         return futures.stream()
@@ -198,33 +198,57 @@ public class LogAnalyzerService {
     }
 
     public LogStats getStats(List<String> apps, Instant from, Instant to) {
-        List<LogAnalysisResult> results = analyzeErrors(apps, from, to, null, null);
+        // Считаем агрегаты напрямую, без analyzeErrors: тот обрезает выборку лимитом
+        // max-analysis-results, и статистика на больших объёмах молча занижалась.
+        // Здесь копятся только счётчики, а не сами записи — лимит не нужен.
+        record SourceStats(String app, long scanned, long errors,
+                           Map<String, Long> byLevel, Map<String, Long> byMessage, Map<String, Long> byHour) {}
 
-        long totalScanned = results.stream().mapToLong(LogAnalysisResult::totalLinesScanned).sum();
-        long totalErrors  = results.stream().mapToLong(LogAnalysisResult::errorCount).sum();
+        Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
+        List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
+                .filter(s -> appSet == null || appSet.contains(s.getName()))
+                .toList();
 
-        Map<String, Long> byLevel = results.stream()
-                .flatMap(r -> r.errors().stream())
-                .collect(Collectors.groupingBy(LogEntry::level, Collectors.counting()));
+        List<CompletableFuture<SourceStats>> futures = sources.stream()
+                .map(source -> CompletableFuture.supplyAsync(() -> {
+                    List<LogEntry> all = loadEntries(source, from, to);
+                    Map<String, Long> byLevel = new java.util.HashMap<>();
+                    Map<String, Long> byMessage = new java.util.HashMap<>();
+                    Map<String, Long> byHour = new java.util.HashMap<>();
+                    long errors = 0;
+                    for (LogEntry e : all) {
+                        if (!matchesLevel(e, null)) continue;
+                        if (from != null && e.timestamp().isBefore(from)) continue;
+                        if (to != null && e.timestamp().isAfter(to)) continue;
+                        errors++;
+                        byLevel.merge(e.level(), 1L, Long::sum);
+                        byMessage.merge(e.message(), 1L, Long::sum);
+                        byHour.merge(e.timestamp().truncatedTo(ChronoUnit.HOURS).toString(), 1L, Long::sum);
+                    }
+                    return new SourceStats(source.getName(), all.size(), errors, byLevel, byMessage, byHour);
+                }, sourceExecutor))
+                .toList();
+        List<SourceStats> perSource = futures.stream().map(CompletableFuture::join).toList();
 
-        Map<String, Long> byApp = results.stream()
-                .collect(Collectors.toMap(LogAnalysisResult::app, LogAnalysisResult::errorCount));
+        long totalScanned = perSource.stream().mapToLong(SourceStats::scanned).sum();
+        long totalErrors  = perSource.stream().mapToLong(SourceStats::errors).sum();
 
-        List<LogStats.TopMessage> topMessages = results.stream()
-                .flatMap(r -> r.errors().stream())
-                .collect(Collectors.groupingBy(LogEntry::message, Collectors.counting()))
-                .entrySet().stream()
+        Map<String, Long> byLevel = new java.util.HashMap<>();
+        Map<String, Long> byMessage = new java.util.HashMap<>();
+        Map<String, Long> byHour = new java.util.HashMap<>();
+        Map<String, Long> byApp = new java.util.HashMap<>();
+        for (SourceStats st : perSource) {
+            if (st.errors() > 0) byApp.put(st.app(), st.errors());
+            st.byLevel().forEach((k, v) -> byLevel.merge(k, v, Long::sum));
+            st.byMessage().forEach((k, v) -> byMessage.merge(k, v, Long::sum));
+            st.byHour().forEach((k, v) -> byHour.merge(k, v, Long::sum));
+        }
+
+        List<LogStats.TopMessage> topMessages = byMessage.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .limit(10)
                 .map(e -> new LogStats.TopMessage(e.getKey(), e.getValue()))
                 .toList();
-
-        Map<String, Long> byHour = results.stream()
-                .flatMap(r -> r.errors().stream())
-                .collect(Collectors.groupingBy(
-                        e -> e.timestamp().truncatedTo(ChronoUnit.HOURS).toString(),
-                        Collectors.counting()
-                ));
 
         return new LogStats(totalScanned, totalErrors, byLevel, byApp, topMessages, byHour);
     }
@@ -368,8 +392,12 @@ public class LogAnalyzerService {
         List<LogEntry> all = new ArrayList<>();
         for (String remotePath : remoteFiles) {
             log.debug("[{}] reading remote file: {}", source.getName(), remotePath);
-            List<String> lines = sshLogReader.readRemoteLines(source, remotePath);
-            List<LogEntry> entries = parser.parseLines(lines, source.getName(), remotePath, source.getLogFormat());
+            // Стримим строки прямо из SFTP-канала и фильтруем по времени при парсинге —
+            // удалённый файл не материализуется в памяти целиком
+            List<LogEntry> entries = sshLogReader.readRemote(source, remotePath,
+                    lines -> parser.parseLines(lines::iterator, source.getName(), remotePath,
+                            source.getLogFormat(), from, null));
+            if (entries == null) entries = List.of();
             log.debug("[{}] parsed {} entries from {}", source.getName(), entries.size(), remotePath);
             all.addAll(entries);
         }

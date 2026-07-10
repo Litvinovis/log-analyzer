@@ -68,11 +68,13 @@ public class SshLogReader {
     }
 
     /**
-     * Reads all lines from a remote file via SFTP.
-     * Supports .gz files. Returns empty list on any error.
+     * Streams lines of a remote file via SFTP into the given function without
+     * materialising the whole file in memory. Supports .gz files.
+     * Returns {@code null} on any error.
      */
-    public List<String> readRemoteLines(LogAnalyzerConfig.Source source, String remotePath) {
-        log.debug("SSH readRemoteLines: {}@{}:{}{}", source.getSshUser(), source.getSshHost(), source.getSshPort(), remotePath);
+    public <T> T readRemote(LogAnalyzerConfig.Source source, String remotePath,
+                            java.util.function.Function<java.util.stream.Stream<String>, T> consumer) {
+        log.debug("SSH readRemote: {}@{}:{}{}", source.getSshUser(), source.getSshHost(), source.getSshPort(), remotePath);
         Session session = null;
         ChannelSftp sftp = null;
         try {
@@ -82,13 +84,11 @@ public class SshLogReader {
             InputStream raw = sftp.get(remotePath);
             InputStream is = remotePath.endsWith(".gz") ? new GZIPInputStream(raw) : raw;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                List<String> lines = reader.lines().toList();
-                log.debug("SSH readRemoteLines: read {} lines from {}", lines.size(), remotePath);
-                return lines;
+                return consumer.apply(reader.lines());
             }
         } catch (Exception e) {
-            log.warn("SSH readRemoteLines failed at {}:{}{} — {}", source.getSshHost(), source.getSshPort(), remotePath, e.getMessage());
-            return List.of();
+            log.warn("SSH readRemote failed at {}:{}{} — {}", source.getSshHost(), source.getSshPort(), remotePath, e.getMessage());
+            return null;
         } finally {
             disconnect(sftp, session);
         }
@@ -104,9 +104,16 @@ public class SshLogReader {
         } else {
             log.warn("SSH key path is not configured (log-analyzer.ssh-key-path)");
         }
+        java.nio.file.Path knownHosts = java.nio.file.Paths.get(
+                System.getProperty("user.home"), ".ssh", "known_hosts");
+        if (java.nio.file.Files.exists(knownHosts)) {
+            jsch.setKnownHosts(knownHosts.toString());
+        }
         log.debug("SSH connecting to {}@{}:{}", source.getSshUser(), source.getSshHost(), source.getSshPort());
         Session session = jsch.getSession(source.getSshUser(), source.getSshHost(), source.getSshPort());
-        session.setConfig("StrictHostKeyChecking", "no");
+        // accept-new: новые хосты принимаются и запоминаются, изменившийся ключ хоста — отклоняется
+        // (раньше стояло "no" — любая MITM-подмена хоста проходила молча)
+        session.setConfig("StrictHostKeyChecking", "accept-new");
         session.connect(10_000);
         log.debug("SSH connected to {}:{}", source.getSshHost(), source.getSshPort());
         return session;

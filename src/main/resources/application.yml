@@ -10,7 +10,7 @@ log-analyzer:
       log-path: /opt/ignite/work/log
       connection: LOCAL
       log-format: IGNITE
-          - name: order-service
+    - name: order-service
       log-path: /var/log/order-service/logs
       connection: LOCAL
       log-format: MICROSERVICE

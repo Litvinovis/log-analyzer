@@ -14,16 +14,21 @@ import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
+import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class LogDirectoryWatcher {
+
+    private static final Logger log = LoggerFactory.getLogger(LogDirectoryWatcher.class);
 
     private final LogAnalyzerConfig config;
     private final LogStore store;
@@ -46,7 +51,10 @@ public class LogDirectoryWatcher {
             Thread thread = new Thread(this::watch, "log-watcher");
             thread.setDaemon(true);
             thread.start();
-        } catch (IOException ignored) {}
+        } catch (IOException e) {
+            log.warn("Не удалось запустить наблюдение за каталогами логов — кэш будет инвалидироваться только по TTL: {}",
+                    e.getMessage());
+        }
     }
 
     private void registerAll(Path root) throws IOException {
@@ -55,8 +63,10 @@ public class LogDirectoryWatcher {
                 .filter(Files::isDirectory)
                 .forEach(dir -> {
                     try {
-                        dir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY);
-                    } catch (IOException ignored) {}
+                        dir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE);
+                    } catch (IOException e) {
+                        log.warn("Не удалось зарегистрировать каталог {}: {}", dir, e.getMessage());
+                    }
                 });
     }
 
@@ -73,6 +83,15 @@ public class LogDirectoryWatcher {
                 if (event.kind() == OVERFLOW) continue;
                 Path dir = (Path) key.watchable();
                 Path file = dir.resolve((Path) event.context());
+                // Новые подкаталоги (ротация логов по датам) тоже берём под наблюдение
+                if (event.kind() == ENTRY_CREATE && Files.isDirectory(file)) {
+                    try {
+                        registerAll(file);
+                    } catch (IOException e) {
+                        log.warn("Не удалось зарегистрировать новый каталог {}: {}", file, e.getMessage());
+                    }
+                    continue;
+                }
                 String name = file.getFileName().toString().toLowerCase();
                 if (name.endsWith(".log") || name.endsWith(".gz")) {
                     store.invalidate(file);

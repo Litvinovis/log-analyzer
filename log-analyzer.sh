@@ -4,15 +4,17 @@ HOME_PATH="$(dirname $(readlink -f "$0"))"
 APP_NAME="$(basename "$0" .sh)"
 JAR_FILE="log-analyzer-1.0.0.jar"
 
+## JMX доступен только с localhost (host-биндинг) и без удалённого debug-агента:
+## открытый JDWP-порт — это удалённое выполнение кода для любого, кто до него дотянется
 COMMANDLINE="/usr/lib/jvm/jre-21/bin/java \
             -Dcom.sun.management.jmxremote \
             -Dcom.sun.management.jmxremote.port=19485 \
-            -Dcom.sun.management.jmxremote.local.only=false \
+            -Dcom.sun.management.jmxremote.host=127.0.0.1 \
+            -Djava.rmi.server.hostname=127.0.0.1 \
+            -Dcom.sun.management.jmxremote.local.only=true \
             -Dcom.sun.management.jmxremote.authenticate=false \
-            -Dcom.sun.management.jmxremote.access.file=/u01/fraudmon/security/jmxremote.access \
-            -Dcom.sun.management.jmxremote.password.file=/u01/fraudmon/security/jmxremote.password \
             -Dcom.sun.management.jmxremote.ssl=false \
-            -Xms128m -Xmx512m -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=15485 \
+            -Xms128m -Xmx512m \
             -Dserver.port=18765 \
             -Dserver.tomcat.threads.max=16 \
             --add-opens=java.base/java.nio=ALL-UNNAMED \

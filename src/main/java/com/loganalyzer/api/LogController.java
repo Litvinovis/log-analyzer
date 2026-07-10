@@ -128,7 +128,11 @@ public class LogController {
     }
 
     private static List<String> parseApps(String app) {
-        return app != null ? List.of(app.split(",")) : List.of();
+        if (app == null) return List.of();
+        return java.util.Arrays.stream(app.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     private static Instant parseInstant(String s) {
@@ -136,9 +140,12 @@ public class LogController {
     }
 
     private static <T> PagedResult<T> toPage(List<T> all, int page, int size) {
+        // Отрицательные значения приводили к IllegalArgumentException в skip()/limit() → HTTP 500
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, size);
         int total      = all.size();
-        int totalPages = size > 0 ? (int) Math.ceil((double) total / size) : 1;
-        List<T> paged  = all.stream().skip((long) page * size).limit(size).toList();
-        return new PagedResult<>(paged, page, size, total, totalPages);
+        int totalPages = (int) Math.ceil((double) total / safeSize);
+        List<T> paged  = all.stream().skip((long) safePage * safeSize).limit(safeSize).toList();
+        return new PagedResult<>(paged, safePage, safeSize, total, totalPages);
     }
 }
