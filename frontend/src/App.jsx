@@ -15,6 +15,7 @@ import StatsPage from './pages/StatsPage'
 import TracePage from './pages/TracePage'
 import AnalyzePage from './pages/AnalyzePage'
 import StreamPage from './pages/StreamPage'
+import { UiContext } from './lib/ui'
 
 const { Sider, Content } = Layout
 
@@ -113,7 +114,9 @@ export default function App() {
         token: isDark ? DARK_TOKENS : LIGHT_TOKENS,
       }}
     >
-      <AppShell isDark={isDark} onToggle={toggle} />
+      <UiContext.Provider value={{ isDark }}>
+        <AppShell isDark={isDark} onToggle={toggle} />
+      </UiContext.Provider>
     </ConfigProvider>
   )
 }

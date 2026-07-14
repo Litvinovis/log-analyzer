@@ -7,6 +7,7 @@ import { useApps } from '../hooks/useApps'
 import { ThunderboltOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
+import { RANGE_PRESETS } from '../lib/ui'
 import LevelTag from '../components/LevelTag'
 
 const { RangePicker } = DatePicker
@@ -130,7 +131,7 @@ export default function AnalyzePage() {
             </Col>
             <Col span={7}>
               <Form.Item name="range" label="Период">
-                <RangePicker showTime style={{ width: '100%' }} />
+                <RangePicker showTime style={{ width: '100%' }} presets={RANGE_PRESETS} />
               </Form.Item>
             </Col>
             <Col span={5}>

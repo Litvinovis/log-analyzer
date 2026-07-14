@@ -1,0 +1,25 @@
+/* Тонировка строк по уровню — полупрозрачная, работает на светлой и тёмной теме */
+.row-FATAL > td { background: rgba(235, 47, 150, 0.10) !important; }
+.row-ERROR > td { background: rgba(255, 77, 79, 0.09) !important; }
+.row-WARN  > td { background: rgba(250, 140, 22, 0.07) !important; }
+
+/* Моноширинный текст лог-строк */
+.log-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+/* Подсветка совпадения поиска в сообщении */
+mark.log-hit {
+  background: rgba(250, 219, 20, 0.45);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+/* UUID внутри сообщения — кликабельная ссылка на трассировку */
+.uuid-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

@@ -1,18 +1,21 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import {
   Card, Form, Input, Select, Button, Table, Space,
-  DatePicker, Typography, Row, Col, Alert,
+  DatePicker, Typography, Row, Col, Alert, Tag,
 } from 'antd'
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
+import { SearchOutlined, ReloadOutlined, ClearOutlined } from '@ant-design/icons'
+import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
+import TimeCell from '../components/TimeCell'
+import MessageCell from '../components/MessageCell'
+import StackTrace from '../components/StackTrace'
 import { useApps } from '../hooks/useApps'
+import { LEVELS, RANGE_PRESETS, rowLevelClass, getAppColor } from '../lib/ui'
 
 const { RangePicker } = DatePicker
-const { Text, Paragraph } = Typography
-
-const LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']
+const { Text } = Typography
 
 const PAGE_SIZE = 20
 
@@ -23,11 +26,13 @@ export default function ErrorsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [page, setPage] = useState(0)
-  const [lastParams, setLastParams] = useState({})
+  const [contains, setContains] = useState('')
+  const [searchParams] = useSearchParams()
 
   const search = useCallback(async (extraParams = {}) => {
     const values = form.getFieldsValue()
     const [from, to] = values.range || []
+    setContains(values.contains || '')
     const params = {
       app: values.app?.join(',') || undefined,
       from: from ? from.toISOString() : undefined,
@@ -38,7 +43,6 @@ export default function ErrorsPage() {
       size: PAGE_SIZE,
       ...extraParams,
     }
-    setLastParams(params)
     setLoading(true)
     setError(null)
     try {
@@ -51,109 +55,80 @@ export default function ErrorsPage() {
     }
   }, [form, page])
 
-  const handleSearch = () => {
-    setPage(0)
-    search({ page: 0 })
-  }
+  // Переход из «Статистики»: /errors?contains=<текст> — сразу ищем
+  useEffect(() => {
+    const q = searchParams.get('contains')
+    if (q) {
+      form.setFieldValue('contains', q)
+      search({ page: 0 })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const handlePageChange = (newPage) => {
-    const p = newPage - 1
-    setPage(p)
-    search({ page: p })
+  const handleSearch = () => { setPage(0); search({ page: 0 }) }
+  const handlePageChange = (newPage) => { const p = newPage - 1; setPage(p); search({ page: p }) }
+  const handleReset = () => {
+    form.resetFields()
+    form.setFieldValue('range', [dayjs().subtract(24, 'hour'), dayjs()])
   }
 
   const columns = [
+    { title: 'Время', dataIndex: 'timestamp', width: 165, render: (v) => <TimeCell value={v} /> },
+    { title: 'Уровень', dataIndex: 'level', width: 82, render: (v) => <LevelTag level={v} /> },
+    { title: 'Приложение', dataIndex: 'app', width: 150, render: (v) => <Tag color={getAppColor(v)}>{v}</Tag> },
     {
-      title: 'Время',
-      dataIndex: 'timestamp',
-      width: 180,
-      render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm:ss.SSS'),
+      title: 'Логгер', dataIndex: 'loggerName', width: 180, ellipsis: true, responsive: ['xl'],
+      render: (v) => v ? <Text type="secondary" style={{ fontSize: 12 }}>{v.split('.').pop()}</Text> : '—',
     },
     {
-      title: 'Уровень',
-      dataIndex: 'level',
-      width: 90,
-      render: (v) => <LevelTag level={v} />,
-    },
-    {
-      title: 'Приложение',
-      dataIndex: 'app',
-      width: 150,
-      ellipsis: true,
-    },
-    {
-      title: 'Поток',
-      dataIndex: 'threadName',
-      width: 180,
-      ellipsis: true,
-      render: (v) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—',
-    },
-    {
-      title: 'Логгер',
-      dataIndex: 'loggerName',
-      width: 200,
-      ellipsis: true,
-      render: (v) => v ? <Text type="secondary" style={{ fontSize: 12 }}>{v}</Text> : '—',
-    },
-    {
-      title: 'Сообщение',
-      dataIndex: 'message',
-      ellipsis: true,
+      title: 'Сообщение', dataIndex: 'message', ellipsis: true,
+      render: (v) => <MessageCell text={v} highlight={contains} />,
     },
   ]
 
-  // Rows that have a stackTrace are expandable
   const expandable = {
-    expandedRowRender: (record) =>
-      record.stackTrace ? (
-        <Paragraph>
-          <pre style={{
-            margin: 0, fontSize: 12, background: '#1a1a1a',
-            color: '#ff6b6b', padding: 12, borderRadius: 4,
-            overflowX: 'auto', maxHeight: 300,
-          }}>
-            {record.stackTrace}
-          </pre>
-        </Paragraph>
-      ) : null,
-    rowExpandable: (record) => !!record.stackTrace,
+    expandedRowRender: (record) => <StackTrace record={record} />,
+    rowExpandable: (record) => !!record.stackTrace || (record.message?.length ?? 0) > 140,
   }
 
-  // Flatten: data.content is List<LogAnalysisResult>, each has errors[]
   const flatRows = data?.content?.flatMap((r, ri) =>
     r.errors.map((e, ei) => ({ key: `${ri}-${ei}`, ...e }))
   ) ?? []
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-      <Card title="Фильтры">
+      <Card size="small">
         <Form form={form} layout="vertical" onFinish={handleSearch}
               initialValues={{ range: [dayjs().subtract(24, 'hour'), dayjs()] }}>
-          <Row gutter={16}>
-            <Col span={6}>
-              <Form.Item name="app" label="Приложение">
-                <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="levels" label="Уровни">
-                <Select mode="multiple" placeholder="По умолчанию: ERROR, FATAL" allowClear options={LEVELS.map(l => ({ value: l, label: l }))} />
-              </Form.Item>
-            </Col>
-            <Col span={7}>
-              <Form.Item name="range" label="Период">
-                <RangePicker showTime style={{ width: '100%' }} />
+          <Row gutter={12}>
+            <Col span={5}>
+              <Form.Item name="app" label="Приложение" style={{ marginBottom: 8 }}>
+                <Select mode="multiple" placeholder="Все приложения" allowClear options={appOptions} maxTagCount="responsive" />
               </Form.Item>
             </Col>
             <Col span={5}>
-              <Form.Item name="contains" label="Поиск в тексте">
-                <Input placeholder="UUID, ключевое слово" allowClear />
+              <Form.Item name="levels" label="Уровни" style={{ marginBottom: 8 }}>
+                <Select mode="multiple" placeholder="ERROR, FATAL" allowClear maxTagCount="responsive"
+                  options={LEVELS.map(l => ({ value: l, label: l }))} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="range" label="Период" style={{ marginBottom: 8 }}>
+                <RangePicker showTime style={{ width: '100%' }} presets={RANGE_PRESETS} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="contains" label="Поиск в тексте" style={{ marginBottom: 8 }}>
+                <Input placeholder="UUID, ключевое слово" allowClear onPressEnter={handleSearch} />
               </Form.Item>
             </Col>
           </Row>
-          <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
-            Найти
-          </Button>
+          <Space>
+            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
+              Найти
+            </Button>
+            <Button icon={<ClearOutlined />} onClick={handleReset}>Сбросить</Button>
+          </Space>
         </Form>
       </Card>
 
@@ -161,28 +136,29 @@ export default function ErrorsPage() {
 
       {data && (
         <Card
+          size="small"
           title={
             <Space>
               <span>Результаты</span>
-              <Text type="secondary" style={{ fontSize: 13 }}>
-                {data.total} совпадений (стр. {data.page + 1} из {data.totalPages || 1})
+              <Text type="secondary" style={{ fontSize: 13, fontWeight: 'normal' }}>
+                {data.total} совпадений · стр. {data.page + 1} из {data.totalPages || 1}
               </Text>
             </Space>
           }
-          extra={
-            <Button icon={<ReloadOutlined />} onClick={() => search()}>Обновить</Button>
-          }
+          extra={<Button size="small" icon={<ReloadOutlined />} onClick={() => search()}>Обновить</Button>}
         >
           <Table
             columns={columns}
             dataSource={flatRows}
             expandable={expandable}
+            rowClassName={rowLevelClass}
             pagination={{
               current: (data.page ?? 0) + 1,
               pageSize: PAGE_SIZE,
               total: data.total,
               onChange: handlePageChange,
               showSizeChanger: false,
+              size: 'small',
             }}
             scroll={{ x: 'max-content' }}
             size="small"
