@@ -1,28 +1,21 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Card, Form, Input, Button, Alert, Space, Table,
   Typography, Tag, Collapse, Empty, Badge, Select, Segmented,
 } from 'antd'
 import { SearchOutlined, UnorderedListOutlined, AppstoreOutlined } from '@ant-design/icons'
+import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { logsApi } from '../api/logsApi'
 import LevelTag from '../components/LevelTag'
+import TimeCell from '../components/TimeCell'
+import StackTrace from '../components/StackTrace'
 import { useApps } from '../hooks/useApps'
+import { rowLevelClass, getAppColor } from '../lib/ui'
 
-const { Text, Paragraph } = Typography
+const { Text } = Typography
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const APP_COLORS = ['cyan', 'geekblue', 'purple', 'volcano', 'gold', 'lime', 'green', 'magenta', 'blue', 'orange']
-const appColorCache = {}
-let appColorIdx = 0
-function getAppColor(app) {
-  if (!appColorCache[app]) {
-    appColorCache[app] = APP_COLORS[appColorIdx % APP_COLORS.length]
-    appColorIdx++
-  }
-  return appColorCache[app]
-}
 
 const TIME_WINDOWS = [
   { value: 10,    label: '10 минут' },
@@ -33,80 +26,29 @@ const TIME_WINDOWS = [
   { value: 1440,  label: '24 часа' },
 ]
 
-const entryColumns = [
-  {
-    title: 'Время',
-    dataIndex: 'timestamp',
-    width: 190,
-    render: (v) => <Text style={{ fontSize: 12 }}>{dayjs(v).format('YYYY-MM-DD HH:mm:ss.SSS')}</Text>,
-  },
-  {
-    title: 'Уровень',
-    dataIndex: 'level',
-    width: 90,
-    render: (v) => <LevelTag level={v} />,
-  },
-  {
-    title: 'Поток',
-    dataIndex: 'threadName',
-    width: 170,
-    ellipsis: true,
-    render: (v) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—',
-  },
-  {
-    title: 'Сообщение',
-    dataIndex: 'message',
-    ellipsis: true,
-  },
-]
+/** Человекочитаемая длительность: мс → с → мин → ч. */
+function fmtDuration(ms) {
+  if (ms < 1000) return `${ms}мс`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(2)}с`
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}м ${Math.floor(ms % 60_000 / 1000)}с`
+  return `${Math.floor(ms / 3_600_000)}ч ${Math.floor(ms % 3_600_000 / 60_000)}м`
+}
 
-const timelineColumns = [
-  {
-    title: 'Время',
-    dataIndex: 'timestamp',
-    width: 190,
-    sorter: (a, b) => a.timestamp.localeCompare(b.timestamp),
-    defaultSortOrder: 'ascend',
-    render: (v) => <Text style={{ fontSize: 12 }}>{dayjs(v).format('YYYY-MM-DD HH:mm:ss.SSS')}</Text>,
-  },
-  {
-    title: 'Уровень',
-    dataIndex: 'level',
-    width: 90,
-    render: (v) => <LevelTag level={v} />,
-  },
-  {
-    title: 'Приложение',
-    dataIndex: 'app',
-    width: 150,
-    render: (v) => <Tag color={getAppColor(v)}>{v}</Tag>,
-  },
-  {
-    title: 'Поток',
-    dataIndex: 'threadName',
-    width: 170,
-    ellipsis: true,
-    render: (v) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—',
-  },
-  {
-    title: 'Сообщение',
-    dataIndex: 'message',
-    ellipsis: true,
-  },
-]
+/** Δ к предыдущей записи: подсвечивает паузы в пути транзакции. */
+function DeltaCell({ ms }) {
+  if (ms == null) return <Text type="secondary">—</Text>
+  const label = `+${fmtDuration(ms)}`
+  const slow = ms >= 1000
+  return (
+    <Text className="log-mono" style={{ fontSize: 11 }} type={slow ? 'warning' : 'secondary'} strong={slow}>
+      {label}
+    </Text>
+  )
+}
 
 const expandable = {
-  expandedRowRender: (r) =>
-    r.stackTrace ? (
-      <pre style={{
-        margin: 0, fontSize: 11, background: '#1a1a1a',
-        color: '#ff6b6b', padding: 10, borderRadius: 4,
-        overflowX: 'auto', maxHeight: 250,
-      }}>
-        {r.stackTrace}
-      </pre>
-    ) : null,
-  rowExpandable: (r) => !!r.stackTrace,
+  expandedRowRender: (r) => <StackTrace record={r} />,
+  rowExpandable: (r) => !!r.stackTrace || (r.message?.length ?? 0) > 140,
 }
 
 export default function TracePage() {
@@ -117,6 +59,7 @@ export default function TracePage() {
   const [error, setError] = useState(null)
   const [searchedId, setSearchedId] = useState('')
   const [viewMode, setViewMode] = useState('timeline')
+  const [searchParams] = useSearchParams()
 
   const search = async () => {
     const { traceId, app, windowMinutes } = form.getFieldsValue()
@@ -141,11 +84,39 @@ export default function TracePage() {
     }
   }
 
+  // Переход по клику на UUID из других страниц: /trace?id=<uuid>
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (id && UUID_RE.test(id)) {
+      form.setFieldsValue({ traceId: id, windowMinutes: 1440 })
+      search()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   const totalEntries = results?.reduce((s, r) => s + r.entries.length, 0) ?? 0
 
-  const flatRows = results?.flatMap((r) =>
+  const flatRows = (results?.flatMap((r) =>
     r.entries.map((e, i) => ({ key: `${r.app}-${i}`, app: r.app, ...e }))
-  ).sort((a, b) => a.timestamp.localeCompare(b.timestamp)) ?? []
+  ) ?? []).sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .map((row, i, arr) => ({
+      ...row,
+      deltaMs: i === 0 ? null : dayjs(row.timestamp).diff(dayjs(arr[i - 1].timestamp)),
+    }))
+
+  const timelineColumns = [
+    { title: 'Время', dataIndex: 'timestamp', width: 165, render: (v) => <TimeCell value={v} /> },
+    { title: 'Δ', dataIndex: 'deltaMs', width: 80, render: (v) => <DeltaCell ms={v} /> },
+    { title: 'Уровень', dataIndex: 'level', width: 82, render: (v) => <LevelTag level={v} /> },
+    { title: 'Приложение', dataIndex: 'app', width: 150, render: (v) => <Tag color={getAppColor(v)}>{v}</Tag> },
+    {
+      title: 'Поток', dataIndex: 'threadName', width: 150, ellipsis: true, responsive: ['xl'],
+      render: (v) => v ? <Text type="secondary" className="log-mono" style={{ fontSize: 11 }}>{v}</Text> : '—',
+    },
+    { title: 'Сообщение', dataIndex: 'message', ellipsis: true, render: (v) => <span className="log-mono">{v}</span> },
+  ]
+
+  const entryColumns = timelineColumns.filter(c => c.dataIndex !== 'app' && c.dataIndex !== 'deltaMs')
 
   const collapseItems = results?.map((r) => ({
     key: r.app,
@@ -160,6 +131,7 @@ export default function TracePage() {
         columns={entryColumns}
         dataSource={r.entries.map((e, i) => ({ key: i, ...e }))}
         expandable={expandable}
+        rowClassName={rowLevelClass}
         pagination={false}
         size="small"
         scroll={{ x: 'max-content' }}
@@ -169,7 +141,7 @@ export default function TracePage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-      <Card title="Поиск транзакции по UUID">
+      <Card size="small" title="Поиск транзакции по UUID">
         <Form form={form} layout="inline" onFinish={search} initialValues={{ windowMinutes: 10 }}>
           <Form.Item
             name="traceId"
@@ -179,17 +151,13 @@ export default function TracePage() {
               { pattern: UUID_RE, message: 'Неверный формат UUID' },
             ]}
           >
-            <Input
-              placeholder="f47ac10b-58cc-4372-a567-0e02b2c3d479"
-              style={{ width: 360 }}
-              allowClear
-            />
+            <Input placeholder="f47ac10b-58cc-4372-a567-0e02b2c3d479" style={{ width: 340 }} allowClear className="log-mono" />
           </Form.Item>
           <Form.Item name="windowMinutes" label="Глубина поиска">
             <Select style={{ width: 130 }} options={TIME_WINDOWS} />
           </Form.Item>
           <Form.Item name="app" label="Приложения">
-            <Select mode="multiple" placeholder="Все" allowClear options={appOptions} style={{ width: 240 }} />
+            <Select mode="multiple" placeholder="Все" allowClear options={appOptions} style={{ width: 220 }} maxTagCount="responsive" />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
@@ -203,12 +171,19 @@ export default function TracePage() {
 
       {results !== null && !loading && (
         <Card
+          size="small"
           title={
             <Space>
               <span>Путь транзакции</span>
-              <Text code style={{ fontSize: 12 }}>{searchedId}</Text>
+              <Text code className="log-mono" style={{ fontSize: 12 }} copyable>{searchedId}</Text>
               {totalEntries > 0 && (
-                <Text type="secondary">— {totalEntries} записей в {results.length} приложениях</Text>
+                <Text type="secondary" style={{ fontWeight: 'normal' }}>
+                  — {totalEntries} записей в {results.length} прил.{
+                    flatRows.length > 1
+                      ? ` за ${fmtDuration(dayjs(flatRows[flatRows.length - 1].timestamp).diff(dayjs(flatRows[0].timestamp)))}`
+                      : ''
+                  }
+                </Text>
               )}
             </Space>
           }
@@ -226,21 +201,19 @@ export default function TracePage() {
           }
         >
           {results.length === 0 ? (
-            <Empty description="UUID не найден ни в одном приложении" />
+            <Empty description="UUID не найден ни в одном приложении. Попробуйте увеличить глубину поиска." />
           ) : viewMode === 'timeline' ? (
             <Table
               columns={timelineColumns}
               dataSource={flatRows}
               expandable={expandable}
+              rowClassName={rowLevelClass}
               pagination={false}
               size="small"
               scroll={{ x: 'max-content' }}
             />
           ) : (
-            <Collapse
-              defaultActiveKey={results.map(r => r.app)}
-              items={collapseItems}
-            />
+            <Collapse defaultActiveKey={results.map(r => r.app)} items={collapseItems} />
           )}
         </Card>
       )}
