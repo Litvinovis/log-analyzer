@@ -117,6 +117,15 @@ public class LogController {
         return ResponseEntity.ok(analyzerService.getConfiguredApps());
     }
 
+    /** Метаданные для UI: список приложений и паттерны идентификаторов трассировки. */
+    @GetMapping("/meta")
+    public ResponseEntity<java.util.Map<String, Object>> getMeta() {
+        return ResponseEntity.ok(java.util.Map.of(
+                "apps", analyzerService.getConfiguredApps(),
+                "idPatterns", analyzerService.getTraceIdPatterns()
+        ));
+    }
+
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");

@@ -28,4 +28,5 @@ export const logsApi = {
   getJob:       (id) => get(`/jobs/${id}`),
   getAllEntries: (params) => get('/all', params),
   getApps:      () => get('/apps'),
+  getMeta:      () => get('/meta'),
 }

@@ -17,6 +17,17 @@ public class LogAnalyzerConfig {
     private int maxConcurrentAnalyses = 2;
     private int maxAnalysisResults = 10_000;
     private int minFreeHeapMb = 200;
+
+    /**
+     * Регэкспы идентификаторов для трассировки/подсветки в UI.
+     * По умолчанию — UUID и числовые ID от 6 цифр (hh_id, Discord snowflake).
+     * «Строгий UUID-режим» = оставить в конфиге только первый паттерн.
+     */
+    private List<String> traceIdPatterns = new ArrayList<>(List.of(
+            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            "\\b\\d{6,20}\\b"
+    ));
+
     private List<Source> sources = new ArrayList<>();
 
     public String getSshKeyPath() { return sshKeyPath; }
@@ -42,6 +53,9 @@ public class LogAnalyzerConfig {
 
     public int getMaxAnalysisResults() { return maxAnalysisResults; }
     public void setMaxAnalysisResults(int v) { this.maxAnalysisResults = v; }
+
+    public List<String> getTraceIdPatterns() { return traceIdPatterns; }
+    public void setTraceIdPatterns(List<String> v) { this.traceIdPatterns = v; }
 
     public int getMinFreeHeapMb() { return minFreeHeapMb; }
     public void setMinFreeHeapMb(int v) { this.minFreeHeapMb = v; }

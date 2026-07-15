@@ -100,6 +100,10 @@ public class LogAnalyzerService {
         log.info("==================================");
     }
 
+    public List<String> getTraceIdPatterns() {
+        return config.getTraceIdPatterns();
+    }
+
     public List<String> getConfiguredApps() {
         return config.getSources().stream()
                 .map(LogAnalyzerConfig.Source::getName)
@@ -139,6 +143,7 @@ public class LogAnalyzerService {
 
     public List<TraceResult> findByTraceId(String traceId, List<String> apps, Instant from, Instant to) {
         List<TraceResult> results = new ArrayList<>();
+        if (traceId == null || traceId.trim().length() < 3) return results;
         Set<String> appSet = (apps != null && !apps.isEmpty()) ? Set.copyOf(apps) : null;
 
         List<LogAnalyzerConfig.Source> sources = config.getSources().stream()
@@ -441,7 +446,27 @@ public class LogAnalyzerService {
     }
 
     private boolean mentionsId(LogEntry e, String id) {
+        java.util.regex.Pattern p = boundaryPatternCache.computeIfAbsent(id, LogAnalyzerService::compileIdPattern);
+        if (p != null) {
+            return (e.message() != null && p.matcher(e.message()).find())
+                    || (e.stackTrace() != null && p.matcher(e.stackTrace()).find());
+        }
         return (e.message() != null && e.message().contains(id))
                 || (e.stackTrace() != null && e.stackTrace().contains(id));
+    }
+
+    private static final ConcurrentHashMap<String, java.util.regex.Pattern> boundaryPatternCache = new ConcurrentHashMap<>();
+
+    /**
+     * Для коротких буквенно-цифровых идентификаторов ищем по границам слова,
+     * иначе подстрочный поиск: запрос «12345» не должен находить «912345678».
+     * Для строк со спецсимволами (UUID с дефисами и т.п.) — обычный contains (null).
+     */
+    private static java.util.regex.Pattern compileIdPattern(String id) {
+        if (id.length() < 16 && id.matches("[\\p{L}\\d_]+")) {
+            return java.util.regex.Pattern.compile(
+                    "(?<![\\p{L}\\d_])" + java.util.regex.Pattern.quote(id) + "(?![\\p{L}\\d_])");
+        }
+        return null;
     }
 }
