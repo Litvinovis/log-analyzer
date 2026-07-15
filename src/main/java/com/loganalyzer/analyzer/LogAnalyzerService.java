@@ -357,7 +357,15 @@ public class LogAnalyzerService {
             long maxBytes = (long) config.getMaxCacheFileSizeMb() * 1024 * 1024;
             if (fileSize <= maxBytes) {
                 // Small file: cache ALL entries, then filter after (cache is reusable across queries)
-                return store.getOrLoad(logFile, () -> parseLocalFile(logFile, appName, format, null, null));
+                return store.getOrLoad(logFile, () -> {
+                    List<LogEntry> parsed = parseLocalFile(logFile, appName, format, null, null);
+                    if (parsed.isEmpty() && fileSize > 0) {
+                        // Непустой файл без единой распознанной записи — почти всегда чужой формат
+                        log.warn("[{}] файл {} ({} байт) не дал ни одной записи — проверьте log-format источника",
+                                appName, logFile.getFileName(), fileSize);
+                    }
+                    return parsed;
+                });
             }
             // Large file: parse with inline time filter to avoid holding full content in heap
             log.debug("File {} ({} MB) exceeds cache limit — parsing with inline filter from={} to={}",
@@ -420,7 +428,10 @@ public class LogAnalyzerService {
                         return name.endsWith(".log") || name.endsWith(".log.gz") || name.endsWith(".gz");
                     })
                     .toList());
-        } catch (IOException ignored) {}
+        } catch (IOException e) {
+            // Молчание здесь выглядело как «источник пуст» без причины (например, нет прав)
+            log.warn("Не удалось перечислить файлы логов в {}: {}", basePath, e.getMessage());
+        }
         return files;
     }
 
