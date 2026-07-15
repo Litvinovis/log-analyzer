@@ -1,0 +1,81 @@
+name: Build & Deploy — Log Analyzer
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java 25
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64" >> $GITHUB_ENV
+          echo "/usr/lib/jvm/java-25-openjdk-amd64/bin" >> $GITHUB_PATH
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build & Test backend
+        run: mvn package -B
+
+      - name: Deploy
+        run: |
+          DEPLOY_DIR=/opt/log-analyzer
+          SERVICE=log-analyzer
+          NEW_JAR=$(ls target/log-analyzer-*.jar | grep -v original | head -1)
+          JAR_NAME=$(basename "$NEW_JAR")
+
+          CURRENT_JAR=$(ls ${DEPLOY_DIR}/log-analyzer-*.jar 2>/dev/null | grep -v backup | head -1)
+          if [ -n "$CURRENT_JAR" ]; then
+            sudo cp "$CURRENT_JAR" "${CURRENT_JAR}.backup.$(date +%Y%m%d_%H%M)"
+            sudo rm "$CURRENT_JAR"
+          fi
+
+          sudo cp "$NEW_JAR" "${DEPLOY_DIR}/${JAR_NAME}"
+          sudo systemctl restart ${SERVICE}
+
+      - name: Smoke test
+        run: |
+          echo "Waiting for service to start..."
+          sleep 15
+          STATUS=$(sudo systemctl is-active log-analyzer)
+          HEALTH=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:18765/api/logs/health || true)
+          if [ "$STATUS" != "active" ] || [ "$HEALTH" != "200" ]; then
+            echo "❌ Service unhealthy (status=$STATUS, health=$HEALTH), rolling back..."
+            LATEST_BACKUP=$(ls -t /opt/log-analyzer/log-analyzer-*.backup.* 2>/dev/null | head -1)
+            if [ -n "$LATEST_BACKUP" ]; then
+              RESTORE_NAME=$(echo "$LATEST_BACKUP" | sed 's/\.backup\.[0-9_]*//')
+              sudo cp "$LATEST_BACKUP" "$RESTORE_NAME"
+              sudo systemctl restart log-analyzer
+            fi
+            exit 1
+          fi
+          echo "✅ Service is healthy"
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TG_TOKEN" ]; then
+            echo "Telegram secrets не заданы — пропуск уведомления"
+            exit 0
+          fi
+          if [ "${{ job.status }}" = "success" ]; then
+            MSG="✅ *Log Analyzer* задеплоен%0Aкоммит: ${{ github.sha }}"
+          else
+            MSG="❌ *Log Analyzer* — деплой упал%0Aсмотри: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d "chat_id=${TG_CHAT}&text=${MSG}&parse_mode=Markdown" > /dev/null
