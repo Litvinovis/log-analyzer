@@ -280,4 +280,31 @@ class LogAnalyzerServiceTest {
         assertEquals(1, results.get(0).errorCount());
         assertEquals("Thread-BackupEventsKafkaLoader", results.get(0).errors().get(0).threadName());
     }
+
+    @Test
+    void numericIdSearchUsesWordBoundaries() throws IOException {
+        LogAnalyzerService service = createService("svc1", LogFormat.MICROSERVICE,
+                "2026-04-19 10:00:00.001 [w1] INFO  svc - Обработка hh_id=135202372 завершена\n" +
+                "2026-04-19 10:00:01.002 [w1] INFO  svc - Похожий номер 9135202372999 не должен совпасть\n");
+        List<TraceResult> hit = service.findByTraceId("135202372", null, null, null);
+        assertEquals(1, hit.size());
+        assertEquals(1, hit.get(0).entries().size());
+        assertTrue(hit.get(0).entries().get(0).message().contains("hh_id=135202372"));
+    }
+
+    @Test
+    void tooShortTraceIdReturnsEmpty() throws IOException {
+        LogAnalyzerService service = createService();
+        assertTrue(service.findByTraceId("ab", null, null, null).isEmpty());
+        assertTrue(service.findByTraceId(null, null, null, null).isEmpty());
+    }
+
+    @Test
+    void uuidSearchStillWorksAsSubstring() throws IOException {
+        String uuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+        LogAnalyzerService service = createService("svc1", LogFormat.MICROSERVICE,
+                "2026-04-19 10:00:00.001 [w1] ERROR svc - Ошибка транзакции Id = " + uuid + "\n");
+        List<TraceResult> hit = service.findByTraceId(uuid, null, null, null);
+        assertEquals(1, hit.size());
+    }
 }

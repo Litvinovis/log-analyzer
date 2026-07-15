@@ -1,24 +1,29 @@
 import React from 'react'
 import { Tooltip } from 'antd'
 import { useNavigate } from 'react-router-dom'
-
-const UUID_G = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+import { useMeta } from '../hooks/useMeta'
 
 function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /**
- * Сообщение лога: моноширинно, найденная подстрока подсвечена,
- * а каждый UUID — ссылка на страницу трассировки.
+ * Сообщение лога: моноширинно, найденная подстрока подсвечена, а каждый
+ * идентификатор (по паттернам из конфига бэка: UUID, числовые ID и т.д.) —
+ * ссылка на страницу трассировки.
  */
 export default function MessageCell({ text, highlight }) {
   const navigate = useNavigate()
+  const { idPatterns } = useMeta()
   if (!text) return '—'
 
-  // Разбивка по UUID (сохранением разделителей), затем подсветка внутри кусков
-  const parts = text.split(UUID_G)
-  const uuids = text.match(UUID_G) ?? []
+  let idRe = null
+  try {
+    idRe = new RegExp(idPatterns.map(p => `(?:${p})`).join('|'), 'gi')
+  } catch { /* кривой паттерн в конфиге — работаем без линковки */ }
+
+  const parts = idRe ? text.split(idRe) : [text]
+  const ids = idRe ? (text.match(idRe) ?? []) : []
 
   const renderPlain = (chunk, keyBase) => {
     if (!highlight) return chunk
@@ -35,13 +40,13 @@ export default function MessageCell({ text, highlight }) {
   const nodes = []
   parts.forEach((p, i) => {
     nodes.push(<React.Fragment key={`p${i}`}>{renderPlain(p, `p${i}`)}</React.Fragment>)
-    if (i < uuids.length) {
-      const id = uuids[i]
+    if (i < ids.length) {
+      const id = ids[i]
       nodes.push(
-        <Tooltip title="Трассировать этот ID" key={`u${i}`}>
+        <Tooltip title="Трассировать этот идентификатор" key={`u${i}`}>
           <a
             className="uuid-link"
-            onClick={(e) => { e.stopPropagation(); navigate(`/trace?id=${id}`) }}
+            onClick={(e) => { e.stopPropagation(); navigate(`/trace?id=${encodeURIComponent(id)}`) }}
           >
             {id}
           </a>

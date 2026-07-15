@@ -15,7 +15,7 @@ import { rowLevelClass, getAppColor } from '../lib/ui'
 
 const { Text } = Typography
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const MIN_ID_LENGTH = 3
 
 const TIME_WINDOWS = [
   { value: 10,    label: '10 минут' },
@@ -87,7 +87,7 @@ export default function TracePage() {
   // Переход по клику на UUID из других страниц: /trace?id=<uuid>
   useEffect(() => {
     const id = searchParams.get('id')
-    if (id && UUID_RE.test(id)) {
+    if (id && id.trim().length >= MIN_ID_LENGTH) {
       form.setFieldsValue({ traceId: id, windowMinutes: 1440 })
       search()
     }
@@ -141,17 +141,17 @@ export default function TracePage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-      <Card size="small" title="Поиск транзакции по UUID">
+      <Card size="small" title="Трассировка по идентификатору">
         <Form form={form} layout="inline" onFinish={search} initialValues={{ windowMinutes: 10 }}>
           <Form.Item
             name="traceId"
-            label="Transaction ID"
+            label="Идентификатор"
             rules={[
-              { required: true, message: 'Введите UUID' },
-              { pattern: UUID_RE, message: 'Неверный формат UUID' },
+              { required: true, message: 'Введите идентификатор' },
+              { min: MIN_ID_LENGTH, message: `Минимум ${MIN_ID_LENGTH} символа` },
             ]}
           >
-            <Input placeholder="f47ac10b-58cc-4372-a567-0e02b2c3d479" style={{ width: 340 }} allowClear className="log-mono" />
+            <Input placeholder="UUID, hh_id, Discord ID, ключевое слово" style={{ width: 340 }} allowClear className="log-mono" />
           </Form.Item>
           <Form.Item name="windowMinutes" label="Глубина поиска">
             <Select style={{ width: 130 }} options={TIME_WINDOWS} />
@@ -201,7 +201,7 @@ export default function TracePage() {
           }
         >
           {results.length === 0 ? (
-            <Empty description="UUID не найден ни в одном приложении. Попробуйте увеличить глубину поиска." />
+            <Empty description="Идентификатор не найден ни в одном приложении. Попробуйте увеличить глубину поиска." />
           ) : viewMode === 'timeline' ? (
             <Table
               columns={timelineColumns}
