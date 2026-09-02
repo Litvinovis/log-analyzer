@@ -39,6 +39,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/**
+ * Оркестрация анализа логов: обходит настроенные источники, читает файлы
+ * (локально или по SSH), фильтрует записи и собирает статистику.
+ * <p>
+ * Источники опрашиваются параллельно через {@link java.util.concurrent.CompletableFuture};
+ * длинные анализы запускаются фоном ({@code analyzeAsync}) с опросом статуса по job id.
+ * Число одновременных анализов и лимит записей ограничены настройками
+ * {@code max-concurrent-analyses} и {@code max-analysis-results} — иначе большой запрос
+ * съедает heap.
+ */
 @Service
 public class LogAnalyzerService {
 

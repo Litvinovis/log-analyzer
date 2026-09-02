@@ -19,6 +19,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * Чтение логов с удалённых серверов по SFTP.
+ * <p>
+ * Авторизация — только по ключу ({@code ssh-key-path}), проверка хоста —
+ * {@code accept-new} с записью в {@code ~/.ssh/known_hosts}. Файлы отдаются
+ * потоком, без полной загрузки в память.
+ */
 @Component
 public class SshLogReader {
 

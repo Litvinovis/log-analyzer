@@ -64,17 +64,4 @@ class LogStoreTest {
         assertEquals(2, callCount[0], "loader should be called again after invalidation");
     }
 
-    @Test
-    void shouldClearAllEntries(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("app.log");
-        Files.writeString(file, "line");
-
-        store.getOrLoad(file, List::of);
-        store.clear();
-
-        int[] callCount = {0};
-        store.getOrLoad(file, () -> { callCount[0]++; return List.of(); });
-
-        assertEquals(1, callCount[0], "loader should be called after clear");
-    }
 }

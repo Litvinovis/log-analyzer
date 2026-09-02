@@ -17,32 +17,28 @@ log-analyzer:
 
   sources:
 
-    # --- Локальный кластер Apache Ignite ---
-    - name: ignite-node-1
-      log-path: /opt/ignite/work/log
+    # Пример: локальные логи Spring-приложений (так настроен рабочий инстанс)
+    - name: stonks-bot
+      log-path: /opt/DiscordBot/logs
       connection: LOCAL
-      log-format: IGNITE             # IGNITE | MICROSERVICE | AUTO
+      log-format: MICROSERVICE        # IGNITE | MICROSERVICE | AUTO
 
-    # --- Локальный микросервис ---
-    - name: order-service
-      log-path: /var/log/order-service/logs
+    - name: challenge-bot
+      log-path: /opt/challengeBot/logs
       connection: LOCAL
       log-format: MICROSERVICE
 
-    # --- Удалённый микросервис по SSH ---
-    - name: payment-service
-      log-path: /opt/payment/logs
+    # Пример: удалённый источник по SSH
+    - name: remote-service
+      log-path: /opt/remote-service/logs
       connection: SSH
       ssh-host: 10.0.0.5
       ssh-port: 22
       ssh-user: ubuntu
       log-format: MICROSERVICE
 
-    # --- Удалённый Ignite по SSH ---
-    - name: ignite-node-2
+    # Пример: логи Apache Ignite (формат поддерживается парсером)
+    - name: ignite-node
       log-path: /opt/ignite/work/log
-      connection: SSH
-      ssh-host: 10.0.0.6
-      ssh-port: 22
-      ssh-user: ubuntu
+      connection: LOCAL
       log-format: IGNITE
