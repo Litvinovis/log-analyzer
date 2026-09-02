@@ -25,6 +25,15 @@ import java.util.zip.GZIPInputStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * Разбор лог-файлов в {@link com.loganalyzer.model.LogEntry}.
+ * <p>
+ * Поддерживает два формата — Apache Ignite ({@code [LEVEL][thread][logger] msg})
+ * и Spring-микросервисы ({@code [thread] LEVEL logger - msg}), а также
+ * автоопределение. Строки, не подходящие ни под один шаблон (stack trace,
+ * тело JSON), присоединяются к предыдущей записи. Читает как {@code .log},
+ * так и {@code .log.gz}; крупные файлы отдаёт потоком, не поднимая в память целиком.
+ */
 @Component
 public class LogFileParser {
 

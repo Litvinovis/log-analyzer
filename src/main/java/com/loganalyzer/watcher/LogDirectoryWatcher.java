@@ -25,6 +25,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * Следит за каталогами локальных источников через {@link java.nio.file.WatchService}
+ * и сбрасывает кэш {@link com.loganalyzer.storage.LogStore} при изменении файлов,
+ * чтобы повторный запрос не отдавал устаревшие записи.
+ * Удалённые источники (SSH) не отслеживаются — для них работает TTL кэша.
+ */
 @Component
 public class LogDirectoryWatcher {
 

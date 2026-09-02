@@ -18,11 +18,11 @@ REST-сервис на Spring Boot для анализа логов. Читае�
 - **Настраиваемая таймзона** — корректная интерпретация меток времени в логах
 - **Кэш файлов** — повторные запросы не перечитывают диск
 - **WatchService** — автоматическая инвалидация кэша при изменении файлов
-- **Actuator** — `/actuator/health`, `/actuator/metrics`
+- **Actuator** — `/actuator/health`, `/actuator/metrics`, `/actuator/prometheus` (рабочий инстанс скрейпится Prometheus)
 
 ## Требования
 
-- Java 21+
+- Java 25+
 - Maven 3.8+
 - Node.js 18+ и npm (только для сборки UI)
 

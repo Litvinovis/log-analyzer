@@ -21,6 +21,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * Кэш разобранных лог-файлов в памяти.
+ * <p>
+ * Держит не более {@code max-cached-files} записей, вытесняя самые старые;
+ * файлы крупнее {@code max-cache-file-size-mb} не кэшируются вовсе.
+ * Инвалидация приходит от {@link com.loganalyzer.watcher.LogDirectoryWatcher}
+ * при изменении файла на диске.
+ */
 @Component
 public class LogStore {
 
@@ -79,10 +87,6 @@ public class LogStore {
 
     public void invalidate(Path file) {
         cache.remove(file);
-    }
-
-    public void clear() {
-        cache.clear();
     }
 
     private void evictIfNeeded() {
