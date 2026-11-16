@@ -5,6 +5,7 @@ import com.loganalyzer.config.LogAnalyzerConfig.Source.ConnectionType;
 import com.loganalyzer.storage.LogStore;
 
 import java.io.IOException;
+import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,8 +66,9 @@ public class LogDirectoryWatcher {
 
     private void registerAll(Path root) throws IOException {
         if (!Files.exists(root)) return;
-        Files.walk(root)
-                .filter(Files::isDirectory)
+        // Files.walk держит дескрипторы каталогов: закрываем поток после регистрации.
+        try (var paths = Files.walk(root)) {
+            paths.filter(Files::isDirectory)
                 .forEach(dir -> {
                     try {
                         dir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE);
@@ -74,9 +76,19 @@ public class LogDirectoryWatcher {
                         log.warn("Не удалось зарегистрировать каталог {}: {}", dir, e.getMessage());
                     }
                 });
+        }
     }
 
     private void watch() {
+        try {
+            watchUntilClosed();
+        } catch (ClosedWatchServiceException e) {
+            // stop() закрывает WatchService и будит take(); это штатное завершение.
+            // Закрытие возможно и при регистрации нового подкаталога внутри цикла.
+        }
+    }
+
+    private void watchUntilClosed() {
         while (!Thread.currentThread().isInterrupted()) {
             WatchKey key;
             try {
